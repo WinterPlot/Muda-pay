@@ -129,7 +129,7 @@ object Session {
         signedIn = true
     }
 
-    fun setUser(u: JSONObject) {
+    fun updateUser(u: JSONObject) {
         user = u
         balance = u.dbl("balance")
     }

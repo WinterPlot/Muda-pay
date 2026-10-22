@@ -86,7 +86,7 @@ fun AuthScreen(register: Boolean, prefillPhone: String, onBack: () -> Unit, onSw
                 if (r.ok) {
                     val tokens = r.data.optJSONObject("tokens")
                     val user = r.data.optJSONObject("user")
-                    if (tokens != null && user != null) { Session.saveTokens(tokens); Session.setUser(user) }
+                    if (tokens != null && user != null) { Session.saveTokens(tokens); Session.updateUser(user) }
                     else error = "Unexpected answer from the server."
                 } else {
                     val reason = r.error?.str("reason") ?: ""

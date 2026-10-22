@@ -66,7 +66,7 @@ fun ActivationScreen() {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).navigationBarsPadding().padding(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
             Remote(refreshKey = reload, call = { Api.call("GET", "/payments/instructions") }) { d, refresh ->
                 LaunchedEffect(d.bool("paid")) {
-                    if (d.bool("paid")) { val r = Api.call("GET", "/me"); if (r.ok) Session.setUser(r.data) }
+                    if (d.bool("paid")) { val r = Api.call("GET", "/me"); if (r.ok) Session.updateUser(r.data) }
                 }
                 val pending = d.bool("payment_pending")
                 val note = d.str("rejection_note")

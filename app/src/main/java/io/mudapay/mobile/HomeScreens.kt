@@ -69,7 +69,7 @@ fun DashboardScreen(nav: (String) -> Unit) {
     }
     Remote(refreshKey = reloadKey, call = { Api.call("GET", "/dashboard") }) { d, _ ->
         LaunchedEffect(d) {
-            d.optJSONObject("user")?.let { Session.setUser(it) }
+            d.optJSONObject("user")?.let { Session.updateUser(it) }
             Session.unread = d.int("unread_notifications")
         }
         DashboardContent(d, claimMsg, nav)

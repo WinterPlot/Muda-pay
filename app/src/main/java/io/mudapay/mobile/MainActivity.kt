@@ -93,7 +93,7 @@ private fun SignedIn() {
     LaunchedEffect(tick) {
         if (Session.user == null) {
             val r = Api.call("GET", "/me")
-            if (r.ok) Session.setUser(r.data) else error = r.message
+            if (r.ok) Session.updateUser(r.data) else error = r.message
         }
     }
     val user = Session.user
