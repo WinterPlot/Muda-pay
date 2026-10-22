@@ -1,6 +1,6 @@
 # Proposed MudaPay shared API contract (integration phase)
 
-**Status: contract proposal only. These endpoints do not exist yet and are not called by the current app.** Implement them in the PHP server at `https://muda-pay.42web.io/api/v1/`, reusing the website's existing PDO/database/business rules. Do not modify the web app's current routes to make the APK work.
+**Status: contract proposal only. These endpoints do not exist yet and are not called by the current app.** Implement them in the PHP server at `https://openinvest.alwaysdata.net/api/v1/`, reusing the website's existing PDO/database/business rules. Do not modify the web app's current routes to make the APK work.
 
 ## General rules
 
