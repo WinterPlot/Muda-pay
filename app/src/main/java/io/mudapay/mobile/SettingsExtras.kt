@@ -31,6 +31,21 @@ private fun ToggleRow(title: String, sub: String, checked: Boolean, enabled: Boo
     }
 }
 
+@Composable
+fun LowDataSettings() {
+    val ctx = LocalContext.current
+    var cleared by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().card().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text("Data saver", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+        Text("Useful on slow or expensive connections.", color = Muted, fontSize = 12.sp)
+        Spacer(Modifier.height(6.dp))
+        ToggleRow("Low-data mode", "Skips video thumbnails and loads other pictures only when you tap them", Offline.lowData) { Offline.setLowData(it) }
+        TextButton(onClick = { OfflineCache.clear(); cleared = true }) {
+            Text(if (cleared) "Saved data cleared" else "Clear saved offline data", color = GreenDark, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
 /* ------------------------------------------------------------------ app lock */
 @Composable
 fun AppLockSettings() {

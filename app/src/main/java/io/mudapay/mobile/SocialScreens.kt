@@ -230,6 +230,7 @@ fun SettingsScreen() {
                 }
             }
         }
+        LowDataSettings()
         AppLockSettings()
         PushSettings()
         SignInMethods()

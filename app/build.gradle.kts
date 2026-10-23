@@ -22,8 +22,8 @@ android {
         applicationId = "io.mudapay.mobile"
         minSdk = 23
         targetSdk = 35
-        versionCode = 4
-        versionName = "2.2.0"
+        versionCode = 5
+        versionName = "2.3.0"
     }
     if (mudaKeystore.exists()) {
         signingConfigs {
@@ -37,6 +37,13 @@ android {
         buildTypes {
             getByName("debug") { signingConfig = signingConfigs.getByName("mudapay") }
             getByName("release") { signingConfig = signingConfigs.getByName("mudapay") }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
     buildFeatures { compose = true }

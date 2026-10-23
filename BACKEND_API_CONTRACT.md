@@ -94,3 +94,10 @@ Errors: `503 google_unavailable` (not configured), `401 invalid_google_token`, `
 ### Status of the 2.1.0 endpoints
 `POST /devices`, `GET /referrals` and `POST /account/delete` are now implemented server-side (`htdocs/api/v1/lib_account.php`).
 Still to build: the FCM sender (cron + admin hooks) that reads `api_devices` and honours `cat_payment / cat_withdrawal / cat_bonus / cat_streak`.
+
+
+## Crypto withdrawals
+
+`GET /withdrawals/rules` also returns `crypto: {enabled, min_usd, local_per_usd, currency, coins:[{code,label,network}]}`.
+`POST /withdrawals` accepts `method: "Crypto"` with `crypto_currency` (a coin `code`) and `account_number` = wallet address; the server validates the address for that coin, fixes the USD value at request time and answers with `amount_usd`.
+`GET /withdrawals` items add `crypto_currency`, `amount_usd`. Withdrawals are never paid automatically: only an admin can mark one paid or rejected. Error code `invalid_crypto` (422).

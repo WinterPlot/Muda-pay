@@ -60,7 +60,9 @@ class ApiResult(
     val data: JSONObject,
     val code: String,
     val message: String,
-    val error: JSONObject? = null
+    val error: JSONObject? = null,
+    val cached: Boolean = false,
+    val cachedAt: Long = 0L
 )
 
 class Upload(val field: String, val filename: String, val mime: String, val bytes: ByteArray)
@@ -145,6 +147,8 @@ object Session {
         accessToken = null
         refreshToken = null
         prefs?.edit()?.clear()?.apply()
+        OfflineCache.clear()
+        PendingQueue.clear()
         user = null
         balance = 0.0
         unread = 0
@@ -181,12 +185,20 @@ object Api {
         idem: String? = null,
         timeoutMs: Int = 30000
     ): ApiResult {
+        val cacheKey = if (method == "GET" && auth) OfflineCache.keyFor(path, query) else null
         val used = Session.accessToken
         var r = request(method, path, body, query, auth, idem, timeoutMs, null)
         if (auth && r.http == 401 && Session.refreshToken != null) {
             if (refresh(used)) r = request(method, path, body, query, auth, idem, timeoutMs, null)
         }
         afterCall(r, auth)
+        if (cacheKey != null) {
+            if (r.ok) OfflineCache.put(cacheKey, r.data)
+            else if (r.code == "network") {
+                val hit = OfflineCache.get(cacheKey)
+                if (hit != null) return ApiResult(200, true, hit.first, "", "", null, true, hit.second)
+            }
+        }
         return r
     }
 
@@ -260,11 +272,14 @@ object Api {
 
             val client = Http.client.newBuilder().readTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS).build()
             client.newCall(rb.build()).execute().use { resp ->
-                parse(resp.code, resp.body?.string() ?: "")
+                val res = parse(resp.code, resp.body?.string() ?: "")
+                Offline.reportReachable(true)
+                res
             }
         } catch (e: SSLPeerUnverifiedException) {
             ApiResult(0, false, JSONObject(), "tls", "A secure connection to MudaPay could not be verified. Update the app or try another network.")
         } catch (e: Exception) {
+            Offline.reportReachable(false)
             ApiResult(0, false, JSONObject(), "network", "Can't reach MudaPay. Check your connection and try again.")
         }
     }

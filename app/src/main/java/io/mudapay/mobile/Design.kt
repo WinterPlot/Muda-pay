@@ -222,7 +222,8 @@ fun LoadingBox(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ErrorBox(message: String, onRetry: () -> Unit) {
+fun ErrorBox(message: String, onRetry: () -> Unit, offline: Boolean = false) {
+    if (offline) { OfflineState(onRetry); return }
     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(Icons.Default.CloudOff, null, tint = Slate, modifier = Modifier.size(44.dp))
         Spacer(Modifier.height(10.dp))
@@ -238,11 +239,19 @@ fun Remote(refreshKey: Any? = null, call: suspend () -> ApiResult, content: @Com
     var result by remember { mutableStateOf<ApiResult?>(null) }
     var tick by remember { mutableIntStateOf(0) }
     LaunchedEffect(refreshKey, tick) { result = call() }
+    val up = Offline.networkUp
+    LaunchedEffect(up) {
+        val c = result
+        if (up && c != null && (c.code == "network" || c.cached)) tick++
+    }
     val r = result
     when {
         r == null -> LoadingBox()
-        r.ok -> content(r.data) { tick++ }
-        else -> ErrorBox(r.message) { result = null; tick++ }
+        r.ok -> {
+            if (r.cached) StaleNote(r.cachedAt)
+            content(r.data) { tick++ }
+        }
+        else -> ErrorBox(r.message, { result = null; tick++ }, offline = r.code == "network")
     }
 }
 
@@ -263,13 +272,23 @@ object ImageCache {
 }
 
 @Composable
-fun RemoteImage(url: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
-    val bmp by produceState<ImageBitmap?>(null, url) { value = ImageCache.load(url) }
-    val b = bmp
-    if (b != null) Image(b, null, modifier, contentScale = contentScale) else Box(modifier.background(Line))
+fun RemoteImage(url: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, tapToLoad: Boolean = true, essential: Boolean = false) {
+    var forced by remember(url) { mutableStateOf(false) }
+    if (Offline.lowData && !essential && !forced) {
+        Box(
+            modifier.background(Line).then(if (tapToLoad) Modifier.clickable { forced = true } else Modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            if (tapToLoad) Icon(Icons.Default.Image, null, tint = Slate)
+        }
+    } else {
+        val bmp by produceState<ImageBitmap?>(null, url) { value = ImageCache.load(url) }
+        val b = bmp
+        if (b != null) Image(b, null, modifier, contentScale = contentScale) else Box(modifier.background(Line))
+    }
 }
 
 @Composable
 fun Flag(code: String, size: Dp = 22.dp) {
-    RemoteImage(flagUrl(code), Modifier.size(size).clip(CircleShape).border(1.5.dp, Color.White, CircleShape), ContentScale.Crop)
+    RemoteImage(flagUrl(code), Modifier.size(size).clip(CircleShape).border(1.5.dp, Color.White, CircleShape), ContentScale.Crop, essential = true)
 }

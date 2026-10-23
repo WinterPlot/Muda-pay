@@ -60,6 +60,7 @@ private fun receiptText(w: JSONObject, symbol: String): String {
         appendLine("Amount: ${money(symbol, w.dbl("amount"))}")
         appendLine("Method: ${w.str("method")}")
         if (acct.isNotEmpty()) appendLine("Account: •••• ${acct.takeLast(4)}")
+        if (w.str("crypto_currency").isNotEmpty()) appendLine("Value: ${"%.2f".format(w.dbl("amount_usd"))} USD in ${w.str("crypto_currency").uppercase()}")
         appendLine("Status: ${w.str("status").replaceFirstChar { it.uppercase() }}")
         appendLine("Requested: ${w.str("created_at").take(16)}")
         if (paid && w.str("paid_at").isNotEmpty()) appendLine("Paid: ${w.str("paid_at").take(16)}")

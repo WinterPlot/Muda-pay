@@ -128,11 +128,12 @@ private fun AuthFlow() {
 @Composable
 private fun SignedIn() {
     var error by remember { mutableStateOf<String?>(null) }
+    var errOffline by remember { mutableStateOf(false) }
     var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(tick) {
+    LaunchedEffect(tick, Offline.networkUp) {
         if (Session.user == null) {
             val r = Api.call("GET", "/me")
-            if (r.ok) Session.updateUser(r.data) else error = r.message
+            if (r.ok) { Session.updateUser(r.data); error = null } else { error = r.message; errOffline = r.code == "network" }
         }
     }
     LaunchedEffect(Ui.pendingRoute) {
@@ -147,7 +148,7 @@ private fun SignedIn() {
             SystemBars(darkIcons = true)
             Box(Modifier.fillMaxSize().statusBarsPadding(), contentAlignment = Alignment.Center) {
                 val e = error
-                if (e != null) ErrorBox(e) { error = null; tick++ } else LoadingBox()
+                if (e != null) ErrorBox(e, { error = null; tick++ }, errOffline) else LoadingBox()
             }
         }
         !user.bool("paid") -> { SystemBars(darkIcons = false); ActivationScreen() }
@@ -197,6 +198,15 @@ private fun MainShell() {
 
     SystemBars(darkIcons = !Ui.immersive && route !in GRADIENT_ROUTES)
 
+    LaunchedEffect(Offline.networkUp) { if (Offline.networkUp) PendingQueue.flush() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(20000)
+            if (PendingQueue.size > 0) PendingQueue.flush()
+        }
+    }
+    val showBanner = !Ui.immersive && (Offline.offline || PendingQueue.size > 0)
+
     val isTab = route in TAB_ROUTES
     Column(Modifier.fillMaxSize().background(Page)) {
         if (!isTab) {
@@ -209,7 +219,7 @@ private fun MainShell() {
                 if (route != "More") IconButton(onClick = { nav("More") }) { Icon(Icons.Default.Menu, "Menu", tint = Ink) }
             })
         }
-        Box(Modifier.weight(1f).then(if (isTab) Modifier else Modifier.navigationBarsPadding())) {
+        Box(Modifier.weight(1f).then(if (isTab || showBanner) Modifier else Modifier.navigationBarsPadding())) {
             NavHost(
                 navController, startDestination = "Home", modifier = Modifier.fillMaxSize(),
                 enterTransition = { fadeIn(tween(160)) }, exitTransition = { fadeOut(tween(100)) },
@@ -221,19 +231,20 @@ private fun MainShell() {
                 composable("Withdraw") { WithdrawScreen(::nav) }
                 composable("Profile") { ProfileScreen(::nav) }
                 composable("More") { MoreScreen(::nav) }
-                composable("Share") { ShareScreen() }
+                composable("Share") { NeedsInternet { ShareScreen() } }
                 composable("Referrals") { ReferralsScreen() }
                 composable("Leaderboard") { LeaderboardScreen() }
                 composable("History") { HistoryScreen() }
                 composable("Rewards") { RewardRatesScreen() }
-                composable("Coach") { CoachScreen() }
+                composable("Coach") { NeedsInternet { CoachScreen() } }
                 composable("Notifications") { NotificationsScreen() }
-                composable("Support") { SupportScreen() }
+                composable("Support") { NeedsInternet { SupportScreen() } }
                 composable("Settings") { SettingsScreen() }
                 composable("About") { AboutScreen() }
                 composable("WithdrawalDetail") { WithdrawalDetailScreen() }
             }
         }
+        if (showBanner) OfflineBanner(if (isTab) Modifier else Modifier.navigationBarsPadding())
         if (isTab && !Ui.immersive) BottomBar(route, ::nav)
     }
 }

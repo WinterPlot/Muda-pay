@@ -1,5 +1,7 @@
 package io.mudapay.mobile
 
+import android.content.Intent
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -37,6 +39,7 @@ fun ActivationScreen() {
     val scope = rememberCoroutineScope()
     var reload by remember { mutableIntStateOf(0) }
     var uploading by remember { mutableStateOf(false) }
+    var cryptoLoading by remember { mutableStateOf(false) }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) {
@@ -87,12 +90,43 @@ fun ActivationScreen() {
                     CopyLine("Number", payee.str("number"))
                     CopyLine("Name", payee.str("name"))
                 }
-                Column(Modifier.fillMaxWidth().card().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Or pay with crypto", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                    d.list("cryptos").forEach { c -> CopyLine(c.str("coin"), c.str("address"), mono = true) }
+                val cryptoAuto = d.optBoolean("crypto_auto", false)
+                val proofAllowed = d.optBoolean("proof_allowed", true)
+                if (cryptoAuto) {
+                    // Automatic crypto payment (NOWPayments): the account activates by itself once the payment is confirmed.
+                    Column(Modifier.fillMaxWidth().card().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Or pay with crypto", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                        Text("BTC, ETH, USDT, SOL and more. Your account activates automatically after the payment is confirmed — no screenshot needed.", color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
+                        PrimaryButton("PAY WITH CRYPTO", {
+                            scope.launch {
+                                cryptoLoading = true
+                                val r = Api.call("POST", "/payments/crypto")
+                                cryptoLoading = false
+                                val url = r.data.str("invoice_url")
+                                if (r.ok && url.isNotEmpty()) {
+                                    ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                                } else Ui.notify("Crypto payment", r.message)
+                            }
+                        }, loading = cryptoLoading, color = Dark, icon = Icons.Default.CurrencyBitcoin)
+                    }
+                    // While the member is paying in the browser, check every 8 s whether the webhook has activated the account.
+                    LaunchedEffect(cryptoLoading) {
+                        while (true) {
+                            kotlinx.coroutines.delay(8000)
+                            val st = Api.call("GET", "/payments/status")
+                            if (st.ok && st.data.bool("paid")) { reload++; break }
+                        }
+                    }
+                } else {
+                    Column(Modifier.fillMaxWidth().card().padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Or pay with crypto", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                        d.list("cryptos").forEach { c -> CopyLine(c.str("coin"), c.str("address"), mono = true) }
+                    }
                 }
-                InfoBanner("After paying, upload a screenshot of your payment. Only send money to the details shown here.")
-                PrimaryButton(if (pending) "REPLACE PAYMENT PROOF" else "UPLOAD PAYMENT PROOF", { picker.launch("image/*") }, loading = uploading, icon = Icons.Default.UploadFile)
+                if (proofAllowed) {
+                    InfoBanner("After paying with mobile money, upload a screenshot of your payment. Only send money to the details shown here.")
+                    PrimaryButton(if (pending) "REPLACE PAYMENT PROOF" else "UPLOAD PAYMENT PROOF", { picker.launch("image/*") }, loading = uploading, icon = Icons.Default.UploadFile)
+                }
                 PrimaryButton("CHECK STATUS", { refresh() }, color = Dark, icon = Icons.Default.Refresh)
             }
         }
@@ -137,13 +171,19 @@ private fun WithdrawForm(rules: JSONObject, reloadKey: Int, onOpen: (JSONObject)
     val scope = rememberCoroutineScope()
     val symbol = rules.str("symbol")
     val min = rules.int("min")
-    val methods = rules.strings("methods")
+    val crypto = rules.optJSONObject("crypto")
+    val coins = crypto?.list("coins") ?: emptyList()
+    val cryptoOn = crypto != null && crypto.optBoolean("enabled", false) && coins.isNotEmpty()
+    val methods = rules.strings("methods") + if (cryptoOn) listOf("Crypto") else emptyList()
+    val localPerUsd = crypto?.dbl("local_per_usd") ?: 0.0
+    val minUsd = crypto?.dbl("min_usd") ?: 0.0
     val need = rules.int("referrals_required")
     val have = rules.int("referrals_active")
     val pending = rules.optJSONObject("pending")
     var amount by remember { mutableStateOf("") }
     var method by remember { mutableStateOf(methods.firstOrNull() ?: "") }
     var account by remember { mutableStateOf("") }
+    var coin by remember { mutableStateOf(coins.firstOrNull()?.str("code") ?: "") }
     var busy by remember { mutableStateOf(false) }
     var idem by remember { mutableStateOf(newIdemKey()) }
 
@@ -162,17 +202,25 @@ private fun WithdrawForm(rules: JSONObject, reloadKey: Int, onOpen: (JSONObject)
             Text("Payout details", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
             InputField("Amount ($symbol)", amount, { amount = it.filter { c -> c.isDigit() } }, keyboard = KeyboardType.Number)
             Text("Minimum: ${money(symbol, min.toDouble())}", color = Muted, fontSize = 12.sp)
-            Dropdown("Payment method", method, methods.map { it to it }) { method = it }
-            InputField("Phone number / account", account, { account = it })
+            Dropdown("Payment method", method, methods.map { it to (if (it == "Crypto") "Crypto (USDT, BTC, ETH…)" else it) }) { method = it }
+            val isCrypto = method == "Crypto"
+            if (isCrypto) {
+                Dropdown("Cryptocurrency", coin, coins.map { it.str("code") to "${it.str("label")} — ${it.str("network")}" }) { coin = it }
+                val usd = if (localPerUsd > 0) (amount.toLongOrNull() ?: 0L) / localPerUsd else 0.0
+                Text("≈ ${"%.2f".format(usd)} USD • minimum ${"%.2f".format(minUsd)} USD", color = Muted, fontSize = 12.sp)
+            }
+            InputField(if (isCrypto) "Wallet address" else "Phone number / account", account, { account = it })
             PrimaryButton("REQUEST WITHDRAWAL", {
                 val amt = amount.toLongOrNull() ?: 0L
                 when {
                     amt < min -> Ui.notify("Withdraw", "Minimum withdrawal is ${money(symbol, min.toDouble())}.")
-                    account.isBlank() -> Ui.notify("Withdraw", "Please enter your payment account or phone number.")
+                    account.isBlank() -> Ui.notify("Withdraw", if (method == "Crypto") "Please paste your wallet address." else "Please enter your payment account or phone number.")
+                    method == "Crypto" && coin.isEmpty() -> Ui.notify("Withdraw", "Please choose a cryptocurrency.")
                     else -> AppLock.requireForWithdrawal(ctx.findActivity()) {
                         busy = true
                         scope.launch {
                             val body = JSONObject().put("amount", amt).put("method", method).put("account_number", account.trim())
+                            if (method == "Crypto") body.put("crypto_currency", coin)
                             val r = Api.call("POST", "/withdrawals", body, idem = idem)
                             busy = false
                             if (r.ok) {
@@ -230,6 +278,8 @@ fun HistoryScreen() {
     var cursor by remember { mutableStateOf<Int?>(null) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var errOffline by remember { mutableStateOf(false) }
+    var cachedAt by remember { mutableStateOf(0L) }
     var totals by remember { mutableStateOf(JSONObject()) }
     var symbol by remember { mutableStateOf(Session.user?.str("symbol") ?: "") }
 
@@ -246,11 +296,14 @@ fun HistoryScreen() {
                 cursor = if (r.data.isNull("next_cursor")) null else r.data.optInt("next_cursor")
                 totals = r.data.optJSONObject("totals") ?: JSONObject()
                 symbol = r.data.str("symbol", symbol)
-            } else error = r.message
+                cachedAt = if (r.cached) r.cachedAt else 0L
+            } else { error = r.message; errOffline = r.code == "network" }
             loading = false
         }
     }
     LaunchedEffect(filter) { cursor = null; loadPage(true) }
+    val up = Offline.networkUp
+    LaunchedEffect(up) { if (up && (cachedAt > 0L || errOffline)) { cursor = null; loadPage(true) } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { PageIntro("Transaction history", "Your rewards and withdrawals.", Icons.AutoMirrored.Filled.ReceiptLong) }
@@ -268,7 +321,8 @@ fun HistoryScreen() {
                 }
             }
         }
-        error?.let { e -> item { ErrorBox(e) { loadPage(true) } } }
+        if (cachedAt > 0L) item { StaleNote(cachedAt) }
+        error?.let { e -> item { ErrorBox(e, { loadPage(true) }, errOffline) } }
         if (items.isEmpty() && !loading && error == null) item { EmptyState("No transactions yet", Icons.AutoMirrored.Filled.ReceiptLong) }
         items(items) { t ->
             val k = KINDS[t.str("type")] ?: Kind("Transaction", Icons.AutoMirrored.Filled.ReceiptLong, Page, Muted)

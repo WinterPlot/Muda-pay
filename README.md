@@ -77,3 +77,13 @@ Push to `main`: the **Android build** workflow (`.github/workflows/android.yml`)
 Download it from the run page → *Artifacts* → `MudaPay-debug-apk`. If the build fails, open the run log
 (or the `build-reports` artifact) and send me the first `e:` error line.
 Set your site address in `app/src/main/java/io/mudapay/mobile/Config.kt` before building.
+
+
+## Offline mode and data saver (2.3.0)
+
+- `Offline.kt`: connectivity tracking, encrypted on-device cache (`OfflineCache`), retry queue (`PendingQueue`), offline screen (`OfflineState`) and the bottom banner.
+- `Api.call` caches successful GETs for /me, /dashboard, /tasks, /videos, /transactions (first page), /withdrawals, /notifications, /referrals, /leaderboard, /campaigns, /settings. When the network fails it returns the saved copy (`ApiResult.cached`) and screens show "showing the copy saved X ago".
+- Task answers and video watch/like rewards made offline are queued (kept 72 h), sent when the connection returns, and the server stays the judge (already_completed answers are dropped silently). Withdrawals and payments are never queued.
+- Screens that need the internet (Muda AI, Support, Share, Withdraw) show the offline screen and reload by themselves when the network is back.
+- Settings > Data saver: low-data mode skips video thumbnails and loads other pictures only on tap.
+- Release builds now use R8 minify + resource shrinking (`app/proguard-rules.pro`).

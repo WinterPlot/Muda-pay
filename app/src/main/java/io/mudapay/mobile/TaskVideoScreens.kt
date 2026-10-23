@@ -53,7 +53,8 @@ fun TasksScreen() {
                     SectionTitle("Today's tasks", "$done of ${items.size} completed")
                     if (items.isEmpty()) EmptyState("No tasks right now", Icons.Default.TaskAlt, "New tasks appear every day.")
                     items.forEach { task ->
-                        val completed = task.bool("completed")
+                        val queued = PendingQueue.has("task", task.int("id"))
+                        val completed = task.bool("completed") || queued
                         Row(
                             Modifier.fillMaxWidth().card().clickable(enabled = !completed) { open = task }.padding(16.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -67,7 +68,7 @@ fun TasksScreen() {
                                 Text(task.str("question"), color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 17.sp)
                             }
                             Spacer(Modifier.width(8.dp))
-                            Pill(if (completed) "Done" else "+" + money(symbol, task.dbl("reward")), if (completed) Slate else GreenDark)
+                            Pill(if (queued) "Will sync" else if (completed) "Done" else "+" + money(symbol, task.dbl("reward")), if (completed) Slate else GreenDark)
                         }
                     }
                 }
@@ -84,13 +85,16 @@ private fun TaskDetail(task: JSONObject, symbol: String, onDone: () -> Unit, onC
     val options = task.strings("options")
     var ready by remember { mutableStateOf(false) }
     var startError by remember { mutableStateOf<String?>(null) }
+    var offlineStart by remember { mutableStateOf(false) }
     var selected by remember { mutableIntStateOf(-1) }
     var busy by remember { mutableStateOf(false) }
 
     // Opening the task tells the server when you started; it only accepts the answer a few seconds later.
     LaunchedEffect(id) {
         val r = Api.call("POST", "/tasks/$id/start")
-        if (r.ok) { delay(3300); ready = true } else startError = r.message
+        if (r.ok) { delay(3300); ready = true }
+        else if (r.code == "network") { offlineStart = true; delay(3300); ready = true }
+        else startError = r.message
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -114,6 +118,7 @@ private fun TaskDetail(task: JSONObject, symbol: String, onDone: () -> Unit, onC
                     Text(text, color = Ink, fontSize = 14.sp, modifier = Modifier.weight(1f))
                 }
             }
+            if (offlineStart) InfoBanner("You're offline. Your answer will be saved and sent when the connection returns.", Blue, Icons.Default.CloudOff)
             startError?.let { InfoBanner(it, Danger) }
             if (startError == null && !ready) InfoBanner("Take a moment to read the task…")
         }
@@ -128,6 +133,10 @@ private fun TaskDetail(task: JSONObject, symbol: String, onDone: () -> Unit, onC
                         if (r.ok) {
                             Session.balance = r.data.dbl("balance")
                             Ui.notify("Task completed 🎉", "+${money(symbol, r.data.dbl("reward"))} added to your balance.")
+                            onDone()
+                        } else if (r.code == "network") {
+                            PendingQueue.addTask(id, offlineStart)
+                            Ui.notify("Saved offline", "Your answer is saved and will be sent automatically when you're back online.")
                             onDone()
                         } else {
                             Ui.notify("Task", r.message)
@@ -166,7 +175,7 @@ fun VideosScreen() {
                     items.forEach { v ->
                         Column(Modifier.fillMaxWidth().card().clickable { info = d; playing = v }.padding(12.dp)) {
                             Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Dark, RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
-                                RemoteImage("https://img.youtube.com/vi/${v.str("youtube_id")}/hqdefault.jpg", Modifier.matchParentSize().background(Dark, RoundedCornerShape(16.dp)), ContentScale.Crop)
+                                RemoteImage("https://img.youtube.com/vi/${v.str("youtube_id")}/hqdefault.jpg", Modifier.matchParentSize().background(Dark, RoundedCornerShape(16.dp)), ContentScale.Crop, tapToLoad = false)
                                 Box(Modifier.size(54.dp).background(Color.Black.copy(alpha = .45f), CircleShape), contentAlignment = Alignment.Center) { Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(34.dp)) }
                             }
                             Spacer(Modifier.height(10.dp))
@@ -197,23 +206,37 @@ private fun VideoPlayer(v: JSONObject, info: JSONObject, onClose: () -> Unit) {
     var started by remember { mutableStateOf(false) }
     var seconds by remember { mutableIntStateOf(0) }
     var likeBusy by remember { mutableStateOf(false) }
+    var offlineStart by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onClose)
     DisposableEffect(Unit) { Ui.immersive = true; onDispose { Ui.immersive = false } }
 
     LaunchedEffect(id) {
         if (watched) started = true
-        else started = Api.call("POST", "/videos/$id/events", JSONObject().put("event", "start")).ok
+        else {
+            val sr = Api.call("POST", "/videos/$id/events", JSONObject().put("event", "start"))
+            started = sr.ok || sr.code == "network"
+            offlineStart = sr.code == "network"
+        }
     }
     LaunchedEffect(started, watched) {
         if (started && !watched) {
             while (seconds < need) { delay(1000); seconds++ }
+            if (offlineStart) {
+                val sr = Api.call("POST", "/videos/$id/events", JSONObject().put("event", "start"))
+                if (sr.ok) { offlineStart = false; delay(10500) }
+            }
             val r = Api.call("POST", "/videos/$id/events", JSONObject().put("event", "watched"))
             if (r.ok) {
                 watched = true
                 Session.balance = r.data.dbl("balance")
                 Ui.notify("Reward earned 🎉", "+${money(symbol, r.data.dbl("reward"))} for watching this video.")
             } else if (r.code == "already_rewarded") watched = true
+            else if (r.code == "network") {
+                PendingQueue.addVideo("watched", id, offlineStart)
+                watched = true
+                Ui.notify("Saved offline", "Your watch reward will be added when you're back online.")
+            }
             else Ui.notify("Video", r.message)
         }
     }
@@ -257,6 +280,11 @@ private fun VideoPlayer(v: JSONObject, info: JSONObject, onClose: () -> Unit) {
                         likeBusy = false
                         if (r.ok) { liked = true; Session.balance = r.data.dbl("balance"); Ui.notify("Reward earned 🎉", "+${money(symbol, r.data.dbl("reward"))} for liking this video.") }
                         else if (r.code == "already_rewarded") liked = true
+                        else if (r.code == "network") {
+                            PendingQueue.addVideo("like", id, false)
+                            liked = true
+                            Ui.notify("Saved offline", "Your like reward will be added when you're back online.")
+                        }
                         else Ui.notify("Video", r.message)
                     }
                 },
