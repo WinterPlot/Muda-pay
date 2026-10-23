@@ -55,6 +55,9 @@ object GoogleAuth {
         data class Failed(val message: String) : Outcome
     }
 
+    /** Debug APKs (GitHub builds) show the technical reason; release builds only show friendly messages. */
+    private fun debuggable(a: Activity) = (a.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
     /** Nonce from the server -> Google account sheet -> ID token. Returns the token or the Outcome to show. */
     private suspend fun fetchIdToken(activity: Activity): Pair<String?, Outcome?> {
         val nonce = Api.call("POST", "/auth/google/nonce", JSONObject(), auth = false)
@@ -67,14 +70,17 @@ object GoogleAuth {
                 GoogleIdTokenCredential.createFrom(credential.data).idToken to null
             } else null to Outcome.Failed("Google sign-in did not return an account. Please try again.")
         } catch (e: GetCredentialCancellationException) {
-            return null to Outcome.Cancelled                      // the member closed the sheet: say nothing
+            Log.w("MudaPay", "Google sign-in cancelled/closed", e)
+            // Normally the member closed the sheet: say nothing. But Google also closes it silently when the Google Cloud setup is
+            // incomplete (consent screen in Testing for a non-test user, or the app's SHA-1 not registered). Debug builds say so.
+            return null to (if (debuggable(activity)) Outcome.Failed("[debug] Google closed the window (${e.message ?: e.type}). If you did not cancel yourself, the Google Cloud setup is not finished: publish the consent screen (or add this account as a test user) and check the Android client's SHA-1.") else Outcome.Cancelled)
         } catch (e: NoCredentialException) {
             Log.w("MudaPay", "Google sign-in: no credential", e)
-            return null to Outcome.Failed("No Google account was found on this phone. Add one in your phone's Settings, then try again.")
+            return null to Outcome.Failed("No Google account was found on this phone. Add one in your phone's Settings, then try again." + if (debuggable(activity)) " [debug] ${e.type}" else "")
         } catch (e: GetCredentialException) {
             // A wrong Web client ID, or an app SHA-1 that is not registered in Google Cloud, ends up here (see README).
             Log.w("MudaPay", "Google sign-in failed: ${e.type}", e)
-            return null to Outcome.Failed("Google sign-in is not available right now. Please try again or use your phone number.")
+            return null to Outcome.Failed("Google sign-in is not available right now. Please try again or use your phone number." + if (debuggable(activity)) " [debug] ${e.type}: ${e.message}" else "")
         } catch (e: GoogleIdTokenParsingException) {
             Log.w("MudaPay", "Google token parse", e)
             return null to Outcome.Failed("Google sign-in did not work. Please try again.")
@@ -96,7 +102,7 @@ object GoogleAuth {
         if (idToken == null) return early ?: Outcome.Failed("Google sign-in did not work. Please try again.")
 
         val r = Api.call("POST", "/auth/google", JSONObject().put("id_token", idToken).put("device", Build.MODEL ?: "Android"), auth = false)
-        if (!r.ok) return Outcome.Failed(authErrorMessage(r))
+        if (!r.ok) return Outcome.Failed(authErrorMessage(r) + if (debuggable(activity)) " [debug] ${r.code}" else "")
         return when (r.data.str("status")) {
             "signed_in" -> if (finishSignIn(r.data)) Outcome.SignedIn else Outcome.Failed("Unexpected answer from the server.")
             "needs_profile" -> Outcome.NeedsProfile(r.data.str("profile_token"), r.data.str("name"), r.data.str("email"))
