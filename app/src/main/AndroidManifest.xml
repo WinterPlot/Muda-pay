@@ -1,0 +1,21 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
+    <application android:name=".MudaApp" android:label="MudaPay" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/Theme.MudaPay" android:usesCleartextTraffic="false" android:allowBackup="false" android:supportsRtl="true">
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_mudapay"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_color" android:resource="@color/mudapay_green"/>
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTop" android:screenOrientation="portrait" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <service android:name=".MudaFcmService" android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
+    </application>
+</manifest>
