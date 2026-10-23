@@ -12,7 +12,20 @@
           "package_name": "io.mudapay.mobile"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "935330728556-q8d66250aenus3b0jgjet1pi5d1ka9d2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "io.mudapay.mobile",
+            "certificate_hash": "0b2fd771041a0c2a086bbe9958e719799f4f9d58"
+          }
+        },
+        {
+          "client_id": "935330728556-esavap4i0q33lof2ljegips1ntb9oj0h.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBKtqy1zy0NzIN4HPOMGEF6MJNJ92xUm-o"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "935330728556-esavap4i0q33lof2ljegips1ntb9oj0h.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
