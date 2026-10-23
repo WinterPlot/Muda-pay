@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "935330728556",
+    "project_id": "mudapay",
+    "storage_bucket": "mudapay.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:935330728556:android:0742c66a2f80d40b81a649",
+        "android_client_info": {
+          "package_name": "io.mudapay.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBKtqy1zy0NzIN4HPOMGEF6MJNJ92xUm-o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
