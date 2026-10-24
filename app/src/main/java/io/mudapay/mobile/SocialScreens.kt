@@ -226,6 +226,7 @@ fun SettingsScreen(nav: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PageIntro("Settings & security", "Language and account protection.", Icons.Default.Settings)
         ShareAppEntry { nav("ShareApp") }
+        EmailVerificationSettings()
         Remote(call = { Api.call("GET", "/settings") }) { d, _ ->
             var lang by remember { mutableStateOf(d.str("language", "en")) }
             Column(Modifier.fillMaxWidth().card().padding(16.dp)) {

@@ -39,6 +39,10 @@ val MORE_ENTRIES = listOf(
     MoreEntry("ShareApp", "Share the app", "Send MudaPay to friends", Icons.Default.Android),
     MoreEntry("Leaderboard", "Leaderboard", "Top referrers", Icons.Default.EmojiEvents),
     MoreEntry("History", "Transaction history", "Rewards and withdrawals", Icons.AutoMirrored.Filled.ReceiptLong),
+    MoreEntry("Send", "Send money", "Pay a member with their phone number", Icons.Default.NorthEast),
+    MoreEntry("Scan", "Scan to pay", "Scan a MudaPay QR code to pay", Icons.Default.QrCodeScanner),
+    MoreEntry("Receive", "Receive money", "Your QR code and money received", Icons.Default.QrCode2),
+    MoreEntry("Deposit", "Deposit", "Add money with crypto", Icons.Default.AddCard),
     MoreEntry("Withdraw", "Withdraw", "Request a payout", Icons.Default.SouthWest),
     MoreEntry("Rewards", "Reward rates", "What each activity pays", Icons.Default.Percent),
     MoreEntry("Coach", "Muda AI", "Your assistant and free lessons", Icons.Default.AutoAwesome),
@@ -141,16 +145,17 @@ private fun DashboardContent(d: JSONObject, claimMsg: String?, nav: (String) -> 
 @Composable
 private fun QuickActions(nav: (String) -> Unit) {
     Row(Modifier.fillMaxWidth().card(RoundedCornerShape(24.dp)).padding(vertical = 14.dp, horizontal = 6.dp), horizontalArrangement = Arrangement.SpaceAround) {
-        QuickAction("Withdraw", Icons.Default.SouthWest, GreenDark) { nav("Withdraw") }
-        QuickAction("Tasks", Icons.Default.TaskAlt, Blue) { nav("Tasks") }
-        QuickAction("Videos", Icons.Default.PlayCircle, Color(0xFF7C3AED)) { nav("Videos") }
+        QuickAction("Send", Icons.Default.NorthEast, GreenDark) { nav("Send") }
+        QuickAction("Receive", Icons.Default.QrCode2, Blue) { nav("Receive") }
+        QuickAction("Scan", Icons.Default.QrCodeScanner, Color(0xFF0891B2)) { nav("Scan") }
+        QuickAction("Deposit", Icons.Default.AddCard, Color(0xFF7C3AED)) { nav("Deposit") }
         QuickAction("Invite", Icons.Default.Groups, Color(0xFFD97706)) { nav("Referrals") }
     }
 }
 
 @Composable
 private fun QuickAction(label: String, icon: ImageVector, tint: Color, onClick: () -> Unit) {
-    Column(Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(Modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = onClick).padding(horizontal = 6.dp, vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(Modifier.size(50.dp).background(tint.copy(alpha = .12f), RoundedCornerShape(17.dp)), contentAlignment = Alignment.Center) {
             Icon(icon, null, tint = tint, modifier = Modifier.size(25.dp))
         }

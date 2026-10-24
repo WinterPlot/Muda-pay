@@ -50,6 +50,26 @@ object Notify {
         ))
     }
 
+    /** "You sent …" receipt, same style as the withdrawal one. The receiver gets a server push (type payment_transfer_in). */
+    fun moneySent(amount: Double, toName: String, toPhone: String, reference: String, note: String, balance: Double?) {
+        val s = sym()
+        send(PushMsg(
+            "payment_transfer_out",
+            "You sent ${money(s, amount)}",
+            "${money(s, amount)} was sent to $toName.",
+            "Send",
+            listOfNotNull(
+                "Amount: ${money(s, amount)}",
+                "To: $toName${if (toPhone.isNotEmpty()) " ($toPhone)" else ""}",
+                note.takeIf { it.isNotEmpty() }?.let { "Note: $it" },
+                if (reference.isNotEmpty()) "Reference: $reference" else null,
+                "Status: Completed",
+                balanceLine(balance)
+            ),
+            subText = "Transfer"
+        ))
+    }
+
     /* ---------------------------------------------------------------- money in */
     fun taskCompleted(reward: Double, balance: Double?) = send(PushMsg(
         "task_reward", "Task completed 🎉", "+${money(sym(), reward)} was added to your balance.", "Tasks",
@@ -110,6 +130,22 @@ object Notify {
         "password_changed", if (firstTime) "Password set" else "Password changed",
         "Your MudaPay password was ${if (firstTime) "set" else "updated"} and your other devices were signed out.", "Settings",
         listOf("If this wasn't you, contact Support right away.")
+    ))
+
+    private fun maskEmail(e: String): String {
+        val at = e.indexOf('@')
+        if (at < 2) return e
+        return e.take(1) + "•••" + e.substring(at)
+    }
+
+    fun emailCodeSent(email: String) = send(PushMsg(
+        "email_code_sent", "Verification code sent", "We sent a 6-digit code to ${maskEmail(email)}. It expires in 10 minutes.", "Settings",
+        listOf("Never share this code with anyone — MudaPay will never ask for it.")
+    ))
+
+    fun emailVerified(email: String) = send(PushMsg(
+        "email_verified", "Email verified ✅", "${maskEmail(email)} is now verified on your MudaPay account.", "Settings",
+        listOf("Your account is now better protected.")
     ))
 
     fun googleLinked() = send(PushMsg(

@@ -290,6 +290,10 @@ private fun MainShell() {
                 composable("ShareApp") { ShareAppScreen() }
                 composable("About") { AboutScreen() }
                 composable("WithdrawalDetail") { WithdrawalDetailScreen() }
+                composable("Send") { NeedsInternet { SendMoneyScreen(::nav) } }
+                composable("Receive") { NeedsInternet { ReceiveMoneyScreen() } }
+                composable("Scan") { NeedsInternet { ScanPayScreen(::nav) } }
+                composable("Deposit") { NeedsInternet { DepositScreen(::nav) } }
             }
         }
         if (showBanner) OfflineBanner(if (isTab) Modifier else Modifier.navigationBarsPadding())

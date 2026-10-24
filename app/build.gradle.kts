@@ -22,8 +22,8 @@ android {
         applicationId = "io.mudapay.mobile"
         minSdk = 23
         targetSdk = 35
-        versionCode = 8
-        versionName = "2.6.0"
+        versionCode = 11
+        versionName = "2.9.0"
     }
     if (mudaKeystore.exists()) {
         signingConfigs {
@@ -70,7 +70,14 @@ dependencies {
     implementation("androidx.biometric:biometric:1.1.0")
     // Background check for new notifications (also restarted after a reboot)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
-    implementation("com.google.zxing:core:3.5.3")
+    // QR codes (drawing the dot-style code + reading it). If app/libs/core-3.5.3.jar is present it is used (works offline);
+    // otherwise the same version is downloaded from Maven. Never both, so there are no duplicate classes.
+    if (file("libs/core-3.5.3.jar").exists()) implementation(files("libs/core-3.5.3.jar")) else implementation("com.google.zxing:core:3.5.3")
+    // Camera for "Scan to pay" (CameraX); the QR codes themselves are read by ZXing above, so Google Play services are not needed.
+    implementation("androidx.camera:camera-core:1.3.4")
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
     // Sign in with Google (Credential Manager + Google ID)
     implementation("androidx.credentials:credentials:1.3.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.3.0")

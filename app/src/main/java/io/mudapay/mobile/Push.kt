@@ -34,11 +34,11 @@ object PushPrefs {
     val LOCAL_KEYS = listOf("activity", "account")
     val ALL_KEYS = KEYS + LOCAL_KEYS
     val LABELS = mapOf(
-        "payment" to ("Payment updates" to "When your activation payment is received, approved or rejected"),
+        "payment" to ("Payment updates" to "Activation payment updates, deposits (credited, under review, expired), and when you send or receive money"),
         "withdrawal" to ("Withdrawals" to "\"You withdrew …\" confirmation, then approved, paid or rejected"),
         "bonus" to ("Daily bonus" to "A reminder that today's bonus is ready, and a receipt when it is added"),
         "streak" to ("Streak at risk" to "A reminder before your login streak resets"),
-        "activity" to ("Rewards & activity" to "Tasks, videos, likes, shares and referral rewards as they happen"),
+        "activity" to ("Rewards & activity" to "Tasks, videos, likes, share results, referral rewards, leaderboard prizes and funds added by MudaPay as they happen"),
         "account" to ("Account & security" to "Password changes, sign-in methods, support tickets and messages from MudaPay")
     )
     private fun p(ctx: Context) = ctx.applicationContext.getSharedPreferences("mudapay_push", Context.MODE_PRIVATE)
@@ -163,10 +163,14 @@ object Push {
         else -> null
     }
     private val ACTIVITY_TYPES = setOf("task_reward", "video_reward", "like_reward", "share_reward", "share_pending", "share_rejected", "credit", "referral", "sync_done")
-    private val ACCOUNT_TYPES = setOf("account", "info", "password_changed", "google_linked", "google_unlinked", "ticket_sent")
+    private val ACCOUNT_TYPES = setOf("account", "info", "password_changed", "google_linked", "google_unlinked", "ticket_sent", "email_code_sent", "email_verified")
 
     private fun defaultRoute(type: String) = when {
         type.startsWith("withdrawal") -> "Withdraw"
+        type == "payment_transfer_in" -> "Receive"
+        type.startsWith("payment_deposit") -> "Deposit"
+        type == "payment_transfer_out" -> "Send"
+        type == "email_code_sent" || type == "email_verified" -> "Settings"
         type == "task_reward" -> "Tasks"
         type == "video_reward" || type == "like_reward" -> "Videos"
         type == "share_reward" || type == "share_pending" || type == "share_rejected" -> "Share"
@@ -263,7 +267,17 @@ object Push {
         val body = data["body"] ?: fallbackBody ?: return
         val details = data["details"]?.split("|")?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
         val wd = data["withdrawal_id"]
-        val dedup = if (!wd.isNullOrEmpty()) "wd:$wd:${statusOf(type)}" else null
+        val ref = data["reference"]
+        val dedup = when {
+            !wd.isNullOrEmpty() -> "wd:$wd:${statusOf(type)}"
+            type == "payment_transfer_in" && !ref.isNullOrEmpty() -> "tr:$ref"
+            type == "payment_deposit" && !ref.isNullOrEmpty() -> "dep:$ref"
+            // deposit under review / expired / failed: one alert per reference and status
+            type.startsWith("payment_deposit_") && !ref.isNullOrEmpty() -> "dep:$ref:$type"
+            else -> null
+        }
+        // the money also exists as a "credit" row in Notifications: tell the sync check it was already announced
+        if (type == "payment_transfer_in" || type == "payment_deposit" || type == "credit" || type == "referral") data["amount"]?.toDoubleOrNull()?.let { markShown(ctx, "credit_amt:${it.toLong()}") }
         post(ctx, PushMsg(type, title, body, data["route"], details, dedup))
     }
 

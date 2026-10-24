@@ -8,6 +8,10 @@
     <!-- Voice chat with Muda AI: the phone's speech recognizer listens through the microphone. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-feature android:name="android.hardware.microphone" android:required="false"/>
+    <!-- Scan to pay: the camera reads MudaPay QR codes. Nothing is recorded or uploaded; phones without a camera can still use the app. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false"/>
     <!-- Android 11+: lets the share screen list the apps that can receive the APK or a text. -->
     <queries>
         <intent>

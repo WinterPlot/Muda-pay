@@ -268,6 +268,9 @@ private val KINDS = mapOf(
     "referral" to Kind("Referral bonus", Icons.Default.Groups, Color(0xFFFFFBEB), Color(0xFFF59E0B)),
     "admin_credit" to Kind("Credit", Icons.Default.AddCircle, Color(0xFFEFF6FF), Color(0xFF2563EB)),
     "withdrawal" to Kind("Withdrawal", Icons.Default.SouthWest, Color(0xFFFEF2F2), Danger),
+    "transfer_out" to Kind("Money sent", Icons.Default.NorthEast, Color(0xFFFEF2F2), Danger),
+    "transfer_in" to Kind("Money received", Icons.Default.QrCode2, Color(0xFFF0FFFB), Green),
+    "deposit" to Kind("Crypto deposit", Icons.Default.CurrencyBitcoin, Color(0xFFEFF6FF), Color(0xFF2563EB)),
     "video" to Kind("Video reward", Icons.Default.PlayCircle, Color(0xFFF5F3FF), Color(0xFF7C3AED)),
     "share_reward" to Kind("Share reward", Icons.Default.Share, Color(0xFFFDF2F8), Color(0xFFDB2777)),
     "leaderboard_prize" to Kind("Leaderboard prize", Icons.Default.EmojiEvents, Color(0xFFFFFBEB), Color(0xFFD97706)),
@@ -310,7 +313,7 @@ fun HistoryScreen() {
     LaunchedEffect(up) { if (up && (cachedAt > 0L || errOffline)) { cursor = null; loadPage(true) } }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { PageIntro("Transaction history", "Your rewards and withdrawals.", Icons.AutoMirrored.Filled.ReceiptLong) }
+        item { PageIntro("Transaction history", "Your rewards, transfers and withdrawals.", Icons.AutoMirrored.Filled.ReceiptLong) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f).card().padding(14.dp)) { Text(L("TOTAL EARNED"), color = Slate, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold); Text(money(symbol, totals.dbl("earned")), color = GreenDark, fontWeight = FontWeight.Black, fontSize = 16.sp) }
@@ -319,7 +322,7 @@ fun HistoryScreen() {
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("all" to "All", "earnings" to "Earnings", "withdrawals" to "Withdrawals").forEach { (k, label) ->
+                listOf("all" to "All", "earnings" to "Earnings", "transfers" to "Transfers", "withdrawals" to "Withdrawals").forEach { (k, label) ->
                     FilterChip(selected = filter == k, onClick = { filter = k }, label = { Text(label, fontWeight = FontWeight.Bold) },
                         colors = FilterChipDefaults.filterChipColors(selectedContainerColor = Green, selectedLabelColor = Color.White))
                 }
@@ -330,7 +333,7 @@ fun HistoryScreen() {
         if (items.isEmpty() && !loading && error == null) item { EmptyState("No transactions yet", Icons.AutoMirrored.Filled.ReceiptLong) }
         items(items) { t ->
             val k = KINDS[t.str("type")] ?: Kind("Transaction", Icons.AutoMirrored.Filled.ReceiptLong, Page, Muted)
-            val isOut = t.str("type") == "withdrawal"
+            val isOut = t.str("type") == "withdrawal" || t.str("type") == "transfer_out"
             Row(Modifier.fillMaxWidth().card(RoundedCornerShape(18.dp)).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(44.dp).background(k.bg, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) { Icon(k.icon, null, tint = k.fg) }
                 Spacer(Modifier.width(12.dp))

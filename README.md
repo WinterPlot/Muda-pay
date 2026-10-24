@@ -1,7 +1,24 @@
-# MudaPay Native Android — v2.6.0 (connected)
+# MudaPay Native Android — v2.9.0 (connected)
 
 Kotlin + Jetpack Compose. The app now talks to the website through `https://<site>/api/v1`
 (see `README_API.md` in the website zip). Set the site address in `app/src/main/java/io/mudapay/mobile/Config.kt`.
+
+## 2.9.0 — Scan to pay + dot-style QR codes
+- **Scan to pay** (`ScanPay.kt`): Home quick action *Scan*, Menu → *Scan to pay*, and a *SCAN QR TO PAY* button on the Send screen. Opens the camera (CameraX), reads the code with ZXing, then opens **Send** with the number (and amount / note when the code carries them) already filled in and the member looked up.
+  The member still sees the **name the server returns** and must confirm (and pass the app lock if enabled); nothing is ever paid automatically. The name inside a QR code is never trusted or read.
+- Also in the scanner: **pick a QR picture from the gallery**, **torch** button, *Type number* shortcut, and a clear screen when the camera permission is refused or the camera cannot start. Works without Google Play services.
+- **Dot-style QR codes** (`DotQr.kt`): round dots instead of squares, rounded corner eyes and a MudaPay badge in the middle. Used by *Receive* (your payment QR), *My referrals* (invite QR) and the shareable image. Error correction level H.
+  The dot size and eye shapes were tuned by decoding hundreds of rendered codes with ZXing at different sizes, rotations and blur: dots must stay at full size (0.5 module) and the inner eyes must stay rounded *squares*; round inner eyes scanned worse.
+- **Receive** now shows the dot QR (`mudapay://pay?v=1&p=<phone>[&a=<amount>][&n=<note>]`), an optional **amount to request** (the QR then carries it), and **SHARE QR CODE** (a ready-to-post picture with name, number and amount). Old codes that hold only a phone number are still accepted by the scanner.
+- No server change. The scanner uses the existing `POST /transfers/lookup` and `POST /transfers` (same limits, idempotency key, verified-email rule and same-country rule as typing the number).
+- New permission: `CAMERA` (asked the first time the scanner opens; `uses-feature camera` is optional). New libraries: CameraX 1.3.4. ZXing: if `app/libs/core-3.5.3.jar` exists it is used (offline builds), otherwise `com.google.zxing:core:3.5.3` from Maven.
+- Version 2.9.0 (versionCode 11). New texts have French translations.
+
+## 2.8.0 — push coverage (server + app)
+Server pushes (FCM, data-only) now also cover: deposit **under review / expired / failed** (`payment_deposit_review|expired|failed`, route `Deposit`), **referral reward** to the inviter (`referral`),
+**share approved** and **share rejected** (`credit` / `share_rejected`), **leaderboard prize** and **admin credit** (`credit`). Credit pushes are sent at the end of the request and only if the
+notification row was really committed. App side (`Push.kt`): deposit pushes open the Deposit screen and are de-duplicated per reference + status; `credit` / `referral` pushes mark the amount as
+already announced so the 90 s / 15 min sync check (`NotifySync`) never shows the same alert twice. The "Rewards & activity" and "Payment updates" switches describe these alerts.
 
 ## New in 2.6.0 — Voice chat with Muda AI
 - **Mic button** in the Muda AI input bar (it turns into *Send* as soon as you type). Opens a full-screen voice conversation (`VoiceChat.kt`).

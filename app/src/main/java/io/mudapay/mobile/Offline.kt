@@ -71,7 +71,7 @@ object Offline {
         } catch (e: Exception) { }
     }
 
-    fun changeLowData(v: Boolean) {
+    fun setLowData(v: Boolean) {
         lowData = v
         prefs?.edit()?.putBoolean("low_data", v)?.apply()
     }

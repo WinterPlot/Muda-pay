@@ -25,9 +25,6 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.EncodeHintType
-import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 
@@ -52,13 +49,8 @@ class ReferralsViewModel : ViewModel() {
     }
 }
 
-private fun qrBitmap(text: String, size: Int = 600): ImageBitmap? = try {
-    val m = QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, size, size, mapOf(EncodeHintType.MARGIN to 1))
-    val ink = 0xFF0F172A.toInt()
-    val white = 0xFFFFFFFF.toInt()
-    val px = IntArray(size * size) { i -> if (m.get(i % size, i / size)) ink else white }
-    Bitmap.createBitmap(px, size, size, Bitmap.Config.ARGB_8888).asImageBitmap()
-} catch (e: Exception) { null }
+/** Dot-style QR code (see DotQr.kt). Kept under the old name so every screen that shows a QR code gets the new look. */
+internal fun qrBitmap(text: String, size: Int = 720): ImageBitmap? = DotQr.render(text, size)?.asImageBitmap()
 
 @Composable
 fun ReferralsScreen(vm: ReferralsViewModel = viewModel()) {
@@ -72,7 +64,7 @@ fun ReferralsScreen(vm: ReferralsViewModel = viewModel()) {
         item { InviteCard(user.str("referral_link")) }
         when (st) {
             is ReferralsViewModel.State.Loading -> item { LoadingBox() }
-            is ReferralsViewModel.State.Error -> item { ErrorBox(st.msg, { vm.load() }) }
+            is ReferralsViewModel.State.Error -> item { ErrorBox(st.msg) { vm.load() } }
             is ReferralsViewModel.State.Data -> {
                 val all = st.d.list("items")
                 val sum = st.d.optJSONObject("summary")
@@ -140,7 +132,7 @@ private fun InviteCard(link: String) {
     Column(Modifier.fillMaxWidth().card().padding(18.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(L("Your invite"), color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
         if (qr != null) {
-            Box(Modifier.background(Color.White, RoundedCornerShape(16.dp)).padding(8.dp)) { Image(qr, "Invite QR code", Modifier.size(180.dp)) }
+            Box(Modifier.background(Color.White, RoundedCornerShape(16.dp)).padding(8.dp)) { Image(qr, "Invite QR code", Modifier.size(210.dp)) }
             Text(L("Friends can scan this to open your invite link."), color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
         }
         Text(link.ifBlank { "—" }, color = Muted, fontSize = 11.sp, textAlign = TextAlign.Center)

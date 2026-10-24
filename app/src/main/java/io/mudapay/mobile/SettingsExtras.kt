@@ -40,7 +40,7 @@ fun LowDataSettings() {
         Text(L("Data saver"), color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
         Text(L("Useful on slow or expensive connections."), color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(6.dp))
-        ToggleRow("Low-data mode", "Skips video thumbnails and loads other pictures only when you tap them", Offline.lowData) { Offline.changeLowData(it) }
+        ToggleRow("Low-data mode", "Skips video thumbnails and loads other pictures only when you tap them", Offline.lowData) { Offline.setLowData(it) }
         TextButton(onClick = { OfflineCache.clear(); cleared = true }) {
             Text(if (cleared) "Saved data cleared" else "Clear saved offline data", color = GreenDark, fontWeight = FontWeight.Bold)
         }
@@ -65,7 +65,7 @@ fun AppLockSettings() {
         }
         if (AppLock.enabled) {
             ToggleRow("Lock when I open the app", "Ask every time you come back after the delay below", AppLock.onLaunch) { AppLock.changeOnLaunch(it) }
-            ToggleRow("Confirm before withdrawals", "Ask again before a payout request is sent", AppLock.forWithdraw) { AppLock.changeForWithdraw(it) }
+            ToggleRow("Confirm before withdrawals and transfers", "Ask again before a payout or a money transfer is sent", AppLock.forWithdraw) { AppLock.changeForWithdraw(it) }
             ToggleRow("Hide screen in recent apps", "Also blocks screenshots and screen recording", AppLock.hideScreen) { AppLock.changeHideScreen(it) }
             Spacer(Modifier.height(6.dp))
             Dropdown(

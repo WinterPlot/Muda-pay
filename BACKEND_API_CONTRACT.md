@@ -107,3 +107,17 @@ Still to build: the FCM sender (cron + admin hooks) that reads `api_devices` and
 FCM v1, **data-only**, `android.priority = HIGH`. Keys: `type`, `route`, `title`, `body`, optional `details` (lines separated by `|`) and `withdrawal_id`.
 The app builds the notification itself (also while it is open) and de-duplicates by `withdrawal_id` + status, so the status check in the app never repeats a push.
 `withdrawal_paid` / `withdrawal_rejected` carry the amount, method and reference (see `mp_push_withdrawal()` in `push_fcm.php`).
+
+## v2.7 — send / receive money and e-mail verification
+See `README_API.md` in the server package ("Send / receive money + e-mail verification"). App side: `TransferScreens.kt`
+(routes `Send`, `Receive`), `EmailVerify.kt` (card at the top of Settings), notification types `payment_transfer_out`,
+`payment_transfer_in`, `email_code_sent`, `email_verified` (same notification style as withdrawals; "Payment updates" switch controls the money ones).
+
+## v2.8 — crypto deposits
+Implemented in `htdocs/api/v1/lib_deposit.php` (server package, see `DEPOSIT_SETUP.md`). App side: `DepositScreens.kt` (route `Deposit`),
+history type `deposit`, push type `payment_deposit`. The app only shows the server quote and polls `GET /deposits/{id}`; it never decides the credited amount.
+
+## v2.9 — scan to pay (no new endpoints)
+QR codes only carry the receiver's phone (and optionally an amount / note): `mudapay://pay?v=1&p=%2B<phone>[&a=<amount>][&n=<note>]`. The app resolves them with the existing
+`POST /transfers/lookup` (shows the server's name for that number) and pays with `POST /transfers`. The server never trusts the amount in a QR code: the usual minimum, daily limit, balance, email and same-country checks apply.
+
