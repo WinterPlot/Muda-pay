@@ -47,9 +47,9 @@ fun ShareScreen() {
                     val r = Api.upload("/campaigns/$cid/proofs", Upload("shot", "shot.jpg", "image/jpeg", bytes))
                     if (r.ok) {
                         val status = r.data.str("status")
-                        if (status == "approved") { Session.balance = r.data.dbl("balance"); Ui.notify("Approved 🎉", "+${money(symbol, r.data.dbl("reward"))} added to your balance.") }
-                        else if (status == "rejected") Ui.notify("Not approved", r.data.str("reason", "We could not verify your post."))
-                        else Ui.notify("Received", "Your screenshot is being reviewed.")
+                        if (status == "approved") { Session.balance = r.data.dbl("balance"); Notify.shareApproved(r.data.dbl("reward"), Session.balance); Ui.notify("Approved 🎉", "+${money(symbol, r.data.dbl("reward"))} added to your balance.") }
+                        else if (status == "rejected") { Notify.shareRejected(r.data.str("reason", "We could not verify your post.")); Ui.notify("Not approved", r.data.str("reason", "We could not verify your post.")) }
+                        else { Notify.shareReceived(); Ui.notify("Received", "Your screenshot is being reviewed.") }
                         reload++
                     } else Ui.notify("Screenshot", r.message)
                 }
@@ -105,9 +105,9 @@ fun LeaderboardScreen() {
         Remote(refreshKey = period, call = { Api.call("GET", "/leaderboard", query = mapOf("period" to period)) }) { d, _ ->
             val symbol = Session.user?.str("symbol") ?: ""
             Column(Modifier.fillMaxWidth().background(Gradient, RoundedCornerShape(22.dp)).padding(18.dp)) {
-                Text("MONTHLY PRIZE", color = Color.White.copy(alpha = .85f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
+                Text(L("MONTHLY PRIZE"), color = Color.White.copy(alpha = .85f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
                 Text(money(symbol, d.dbl("prize")), color = Gold, fontSize = 30.sp, fontWeight = FontWeight.Black)
-                Text("Reach at least ${d.int("min_referrals_to_win")} referrals to qualify.", color = Color.White.copy(alpha = .9f), fontSize = 12.sp)
+                Text(L("Reach at least ${d.int("min_referrals_to_win")} referrals to qualify."), color = Color.White.copy(alpha = .9f), fontSize = 12.sp)
             }
             d.optJSONObject("last_winner")?.let { w ->
                 InfoBanner("Last winner: ${w.str("user_name")} (${countryName(w.str("country"))}) with ${w.int("referrals")} referrals won ${money(symbol, w.dbl("prize"))}.", Color(0xFFD97706), Icons.Default.EmojiEvents)
@@ -119,13 +119,13 @@ fun LeaderboardScreen() {
                 val rank = r.int("rank")
                 Row(Modifier.fillMaxWidth().card(RoundedCornerShape(18.dp), if (me) Green.copy(alpha = .1f).compositeOver(Color.White) else Color.White).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(36.dp).background(when (rank) { 1 -> Gold; 2 -> Color(0xFFCBD5E1); 3 -> Color(0xFFF1B27A); else -> Page }, CircleShape), contentAlignment = Alignment.Center) {
-                        Text("$rank", color = Dark, fontWeight = FontWeight.Black)
+                        Text(L("$rank"), color = Dark, fontWeight = FontWeight.Black)
                     }
                     Spacer(Modifier.width(12.dp))
                     Flag(r.str("country", "bi"), 22.dp)
                     Spacer(Modifier.width(8.dp))
                     Text(r.str("name") + if (me) " (you)" else "", color = Dark, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, modifier = Modifier.weight(1f))
-                    Text("${r.int("referrals")} refs", color = GreenDark, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                    Text(L("${r.int("referrals")} refs"), color = GreenDark, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
                 }
             }
             d.optJSONObject("me")?.let { m ->
@@ -148,15 +148,22 @@ fun NotificationsScreen() {
             val items = d.list("items")
             if (items.isEmpty()) EmptyState("No notifications yet", Icons.Default.NotificationsNone)
             items.forEach { n ->
+                val credit = n.str("type") == "credit"
+                val tone = if (credit) GreenDark else Blue
                 Row(Modifier.fillMaxWidth().card(RoundedCornerShape(18.dp)).padding(14.dp), verticalAlignment = Alignment.Top) {
-                    Box(Modifier.size(10.dp).padding(top = 5.dp).background(if (!n.bool("is_read")) Green else Color.Transparent, CircleShape))
-                    Spacer(Modifier.width(10.dp))
+                    Box(Modifier.size(42.dp).background(tone.copy(alpha = .12f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                        Icon(if (credit) Icons.Default.AddCircle else Icons.Default.Notifications, null, tint = tone, modifier = Modifier.size(22.dp))
+                    }
+                    Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(n.str("title"), color = Dark, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(n.str("title"), color = Dark, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp, modifier = Modifier.weight(1f, fill = false))
+                            if (!n.bool("is_read")) { Spacer(Modifier.width(8.dp)); Pill("NEW", Green) }
+                        }
                         Text(n.str("message"), color = Muted, fontSize = 12.sp, lineHeight = 17.sp)
                         Text(n.str("created_at").take(16), color = Slate, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
                     }
-                    if (!n.isNull("amount")) Text("+" + money(symbol, n.dbl("amount")), color = GreenDark, fontWeight = FontWeight.Black, fontSize = 12.sp)
+                    if (!n.isNull("amount")) Text(L("+") + money(symbol, n.dbl("amount")), color = GreenDark, fontWeight = FontWeight.Black, fontSize = 12.sp)
                 }
             }
         }
@@ -185,7 +192,7 @@ fun SupportScreen() {
                     scope.launch {
                         val r = Api.call("POST", "/support/tickets", JSONObject().put("category", category).put("subject", subject.trim()).put("message", message.trim()))
                         busy = false
-                        if (r.ok) { subject = ""; message = ""; Ui.notify("Ticket sent", "We received your request."); reload++ } else Ui.notify("Support", r.message)
+                        if (r.ok) { Notify.ticketSent(subject); subject = ""; message = ""; Ui.notify("Ticket sent", "We received your request."); reload++ } else Ui.notify("Support", r.message)
                     }
                 }
             }, loading = busy, icon = Icons.Default.Send)
@@ -201,7 +208,7 @@ fun SupportScreen() {
                         Pill(t.str("status"), if (t.str("status").equals("Pending", true)) Blue else GreenDark)
                     }
                     Text(t.str("message"), color = Muted, fontSize = 12.sp, maxLines = 3, lineHeight = 17.sp)
-                    Text("${t.str("category")} • ${t.str("created_at").take(16)}", color = Slate, fontSize = 10.sp)
+                    Text(L("${t.str("category")} • ${t.str("created_at").take(16)}"), color = Slate, fontSize = 10.sp)
                 }
             }
         }
@@ -210,7 +217,7 @@ fun SupportScreen() {
 
 /* ------------------------------------------------------------------ settings */
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(nav: (String) -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var current by remember { mutableStateOf("") }
@@ -218,6 +225,7 @@ fun SettingsScreen() {
     var busy by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         PageIntro("Settings & security", "Language and account protection.", Icons.Default.Settings)
+        ShareAppEntry { nav("ShareApp") }
         Remote(call = { Api.call("GET", "/settings") }) { d, _ ->
             var lang by remember { mutableStateOf(d.str("language", "en")) }
             Column(Modifier.fillMaxWidth().card().padding(16.dp)) {
@@ -230,25 +238,40 @@ fun SettingsScreen() {
                 }
             }
         }
+        AppLanguageSettings()
+        LowDataSettings()
+        AppLockSettings()
+        PushSettings()
+        SignInMethods()
+        // Accounts created with Google have no password yet: they can set one (no "current password" to type).
+        val hasPassword = Session.user?.optBoolean("has_password", true) ?: true
         Column(Modifier.fillMaxWidth().card().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Change password", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-            InputField("Current password", current, { current = it }, password = true)
+            Text(if (hasPassword) "Change password" else "Set a password", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+            if (!hasPassword) Text(L("You signed up with Google. A password lets you also log in with your phone number."), color = Muted, fontSize = 12.sp, lineHeight = 18.sp)
+            if (hasPassword) InputField("Current password", current, { current = it }, password = true)
             InputField("New password (min. 6 characters)", newPw, { newPw = it }, password = true)
-            PrimaryButton("UPDATE PASSWORD", {
+            PrimaryButton(if (hasPassword) "UPDATE PASSWORD" else "SET PASSWORD", {
                 if (newPw.length < 6) Ui.notify("Password", "The new password must have at least 6 characters.")
                 else {
                     busy = true
                     scope.launch {
-                        val r = Api.call("POST", "/settings/password", JSONObject().put("current_password", current).put("new_password", newPw))
+                        val body = JSONObject().put("new_password", newPw)
+                        if (hasPassword) body.put("current_password", current)
+                        val r = Api.call("POST", "/settings/password", body)
                         busy = false
-                        if (r.ok) { current = ""; newPw = ""; Ui.notify("Password updated", "Your other devices were signed out.") } else Ui.notify("Password", r.message)
+                        if (r.ok) {
+                            current = ""; newPw = ""
+                            if (!hasPassword) Api.call("GET", "/me").let { me -> if (me.ok) Session.updateUser(me.data) }
+                            Notify.passwordChanged(!hasPassword)
+                            Ui.notify(if (hasPassword) "Password updated" else "Password set", "Your other devices were signed out.")
+                        } else Ui.notify("Password", r.message)
                     }
                 }
-            }, loading = busy, enabled = current.isNotEmpty())
+            }, loading = busy, enabled = !hasPassword || current.isNotEmpty())
         }
         ContentRow("Sign out of all devices", "Ends every session, including this one", Icons.Default.Security, {
             scope.launch { Api.call("POST", "/auth/logout", JSONObject().put("all", true)); Session.signOut() }
         }, tint = Danger)
-        ContentRow("Delete my account", "Opens the website settings", Icons.Default.DeleteForever, { openUrl(ctx, "${Config.SITE}/settings.php") }, tint = Danger)
+        DeleteAccountSection()
     }
 }

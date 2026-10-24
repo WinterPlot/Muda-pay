@@ -8,8 +8,10 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.UUID
@@ -42,6 +44,15 @@ fun shareText(ctx: Context, text: String) {
     } catch (e: Exception) { Ui.notify("Share", "No app is available to share this.") }
 }
 
+fun shareWhatsApp(ctx: Context, text: String) {
+    try {
+        val i = Intent(Intent.ACTION_SEND).apply { type = "text/plain"; setPackage("com.whatsapp"); putExtra(Intent.EXTRA_TEXT, text) }
+        ctx.startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } catch (e: Exception) {
+        openUrl(ctx, "https://wa.me/?text=" + java.net.URLEncoder.encode(text, "UTF-8"))
+    }
+}
+
 fun openUrl(ctx: Context, url: String) {
     try {
         ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -70,6 +81,30 @@ object Ui {
     var message by mutableStateOf("")
     /** true while a full-screen black player is shown (hides the bottom bar, light status icons). */
     var immersive by mutableStateOf(false)
+    /** Goes up every time the member pulls to refresh (or something changed); every loaded screen reloads on it. */
+    var refreshTick by mutableIntStateOf(0)
+    /** Screen asked for by a push notification tap; consumed by the navigation host. */
+    var pendingRoute by mutableStateOf<String?>(null)
+    /** Withdrawal opened from the list, shown on the detail / receipt screen. */
+    var selectedWithdrawal by mutableStateOf<JSONObject?>(null)
     fun notify(t: String, m: String) { title = t; message = m }
     fun clear() { title = null }
+}
+
+/**
+ * Pull-to-refresh / refresh button: reloads the profile and balance, makes every open screen reload,
+ * sends saved offline actions and checks for new notifications. Returns false when the server could not be reached.
+ */
+suspend fun refreshEverything(): Boolean {
+    Offline.clearFailure()
+    val me = Api.call("GET", "/me")
+    val ok = me.ok && !me.cached
+    if (ok) Session.updateUser(me.data)
+    Ui.refreshTick++
+    if (ok) {
+        Push.appOrNull()?.let { NotifySync.check(it, forceWithdrawals = true) }
+        if (PendingQueue.size > 0) PendingQueue.flush()
+    }
+    kotlinx.coroutines.delay(600)
+    return ok
 }

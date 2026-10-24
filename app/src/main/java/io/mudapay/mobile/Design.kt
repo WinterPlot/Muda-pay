@@ -2,6 +2,7 @@ package io.mudapay.mobile
 
 import android.graphics.BitmapFactory
 import android.util.LruCache
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -18,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -56,7 +59,9 @@ val BtnShape = RoundedCornerShape(16.dp)    // --r-btn
 
 /** White card with the site's soft shadow (--shadow-card). */
 fun Modifier.card(shape: RoundedCornerShape = CardShape, color: Color = Color.White): Modifier =
-    this.shadow(3.dp, shape, ambientColor = Color(0x1A000000), spotColor = Color(0x1A000000)).background(color, shape)
+    this.shadow(7.dp, shape, ambientColor = Color(0x120F172A), spotColor = Color(0x240F172A))
+        .background(color, shape)
+        .border(1.dp, Color(0x0F0F172A), shape)
 
 /* ------------------------------------------------ brand + headers */
 @Composable
@@ -67,8 +72,8 @@ fun Brand(light: Boolean = false) {
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(22.dp)) }
         Column {
-            Text("MudaPay", fontWeight = FontWeight.Black, fontSize = 20.sp, color = if (light) Color.White else Ink, letterSpacing = (-.5).sp)
-            Text("GROW • LEARN • EARN", fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (light) Color.White.copy(alpha = .8f) else Muted, letterSpacing = 1.sp)
+            Text(L("MudaPay"), fontWeight = FontWeight.Black, fontSize = 20.sp, color = if (light) Color.White else Ink, letterSpacing = (-.5).sp)
+            Text(L("GROW • LEARN • EARN"), fontSize = 8.sp, fontWeight = FontWeight.Bold, color = if (light) Color.White.copy(alpha = .8f) else Muted, letterSpacing = 1.sp)
         }
     }
 }
@@ -76,8 +81,14 @@ fun Brand(light: Boolean = false) {
 /** Green→blue header with the bottom radius used on the site's dashboard. */
 @Composable
 fun GradientHeader(modifier: Modifier = Modifier, bottomPadding: Dp = 56.dp, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(bottomStart = 40.dp, bottomEnd = 40.dp)
     Column(
-        modifier.fillMaxWidth().background(Gradient, RoundedCornerShape(bottomStart = 40.dp, bottomEnd = 40.dp))
+        modifier.fillMaxWidth().clip(shape).background(Gradient)
+            .drawBehind {
+                drawCircle(Color.White.copy(alpha = .09f), radius = size.width * .42f, center = Offset(size.width * .98f, size.height * .05f))
+                drawCircle(Color.White.copy(alpha = .06f), radius = size.width * .28f, center = Offset(size.width * .02f, size.height * .98f))
+                drawCircle(Color.White.copy(alpha = .05f), radius = size.width * .12f, center = Offset(size.width * .55f, size.height * .92f))
+            }
             .statusBarsPadding().padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = bottomPadding),
         content = content
     )
@@ -86,13 +97,13 @@ fun GradientHeader(modifier: Modifier = Modifier, bottomPadding: Dp = 56.dp, con
 @Composable
 fun PageHeader(title: String, onBack: () -> Unit, trailing: @Composable () -> Unit = {}) {
     Row(
-        Modifier.fillMaxWidth().background(Color.White).statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().shadow(4.dp, ambientColor = Color(0x1A0F172A), spotColor = Color(0x1A0F172A)).background(Color.White).statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Ink) }
         Column(Modifier.weight(1f)) {
             Text(title, color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 17.sp)
-            Text("MudaPay", color = Muted, fontSize = 10.sp)
+            Text(L("MudaPay"), color = Muted, fontSize = 10.sp)
         }
         trailing()
     }
@@ -125,6 +136,23 @@ fun SectionTitle(title: String, subtitle: String? = null) {
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, loading: Boolean = false,
                   color: Color = Green, contentColor: Color = Color.White, icon: ImageVector? = null) {
+    if (color == Green) {
+        val shape = RoundedCornerShape(18.dp)
+        val active = enabled && !loading
+        Box(
+            modifier.fillMaxWidth().height(52.dp).clip(shape)
+                .background(if (enabled) Gradient else Brush.linearGradient(listOf(Green.copy(alpha = .45f), Blue.copy(alpha = .45f))))
+                .clickable(enabled = active, onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            if (loading) CircularProgressIndicator(Modifier.size(20.dp), color = contentColor, strokeWidth = 2.5.dp)
+            else Row(verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) { Icon(icon, null, tint = contentColor, modifier = Modifier.size(19.dp)); Spacer(Modifier.width(8.dp)) }
+                Text(text, color = contentColor, fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)
+            }
+        }
+        return
+    }
     Button(
         onClick = onClick, enabled = enabled && !loading, modifier = modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(18.dp),
         colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = contentColor, disabledContainerColor = color.copy(alpha = .45f), disabledContentColor = contentColor.copy(alpha = .8f))
@@ -189,8 +217,10 @@ fun EmptyState(title: String, icon: ImageVector, subtitle: String? = null) {
 @Composable
 fun StatBox(title: String, subtitle: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Column(modifier.card().clickable(onClick = onClick).padding(vertical = 20.dp, horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Icon(icon, null, tint = Green, modifier = Modifier.size(26.dp))
-        Spacer(Modifier.height(8.dp))
+        Box(Modifier.size(46.dp).background(Green.copy(alpha = .12f), RoundedCornerShape(16.dp)), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = GreenDark, modifier = Modifier.size(25.dp))
+        }
+        Spacer(Modifier.height(10.dp))
         Text(title, color = Dark, fontWeight = FontWeight.Black, fontSize = 15.sp, textAlign = TextAlign.Center)
         Text(subtitle.uppercase(), color = Muted, fontWeight = FontWeight.Bold, fontSize = 10.sp, textAlign = TextAlign.Center)
     }
@@ -222,7 +252,8 @@ fun LoadingBox(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ErrorBox(message: String, onRetry: () -> Unit) {
+fun ErrorBox(message: String, onRetry: () -> Unit, offline: Boolean = false) {
+    if (offline) { OfflineState(onRetry); return }
     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(Icons.Default.CloudOff, null, tint = Slate, modifier = Modifier.size(44.dp))
         Spacer(Modifier.height(10.dp))
@@ -232,17 +263,46 @@ fun ErrorBox(message: String, onRetry: () -> Unit) {
     }
 }
 
-/** Loads once (and again when [refreshKey] changes or the content asks for a reload). */
+/** Pulsing placeholder cards shown while a screen loads for the first time. */
+@Composable
+fun SkeletonCards(count: Int = 3) {
+    val t = rememberInfiniteTransition(label = "skeleton")
+    val a by t.animateFloat(.35f, .85f, infiniteRepeatable(tween(900), RepeatMode.Reverse), label = "alpha")
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        repeat(count) {
+            Column(Modifier.fillMaxWidth().card().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(Modifier.fillMaxWidth(.45f).height(14.dp).background(Line.copy(alpha = a), RoundedCornerShape(7.dp)))
+                Box(Modifier.fillMaxWidth().height(12.dp).background(Line.copy(alpha = a), RoundedCornerShape(6.dp)))
+                Box(Modifier.fillMaxWidth(.7f).height(12.dp).background(Line.copy(alpha = a), RoundedCornerShape(6.dp)))
+            }
+        }
+    }
+}
+
+/** Loads once (and again when [refreshKey] changes, on pull-to-refresh, or when the content asks for a reload). */
 @Composable
 fun Remote(refreshKey: Any? = null, call: suspend () -> ApiResult, content: @Composable (JSONObject, () -> Unit) -> Unit) {
     var result by remember { mutableStateOf<ApiResult?>(null) }
     var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(refreshKey, tick) { result = call() }
+    LaunchedEffect(refreshKey, tick, Ui.refreshTick) {
+        val fresh = call()
+        val old = result
+        // a failed refresh keeps what is already on screen instead of replacing it with an error
+        result = if (!fresh.ok && old != null && old.ok) old else fresh
+    }
+    val up = Offline.networkUp
+    LaunchedEffect(up) {
+        val c = result
+        if (up && c != null && (c.code == "network" || c.cached)) tick++
+    }
     val r = result
     when {
-        r == null -> LoadingBox()
-        r.ok -> content(r.data) { tick++ }
-        else -> ErrorBox(r.message) { result = null; tick++ }
+        r == null -> SkeletonCards()
+        r.ok -> {
+            if (r.cached) StaleNote(r.cachedAt)
+            content(r.data) { tick++ }
+        }
+        else -> ErrorBox(r.message, { result = null; tick++ }, offline = r.code == "network")
     }
 }
 
@@ -263,13 +323,23 @@ object ImageCache {
 }
 
 @Composable
-fun RemoteImage(url: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop) {
-    val bmp by produceState<ImageBitmap?>(null, url) { value = ImageCache.load(url) }
-    val b = bmp
-    if (b != null) Image(b, null, modifier, contentScale = contentScale) else Box(modifier.background(Line))
+fun RemoteImage(url: String, modifier: Modifier = Modifier, contentScale: ContentScale = ContentScale.Crop, tapToLoad: Boolean = true, essential: Boolean = false) {
+    var forced by remember(url) { mutableStateOf(false) }
+    if (Offline.lowData && !essential && !forced) {
+        Box(
+            modifier.background(Line).then(if (tapToLoad) Modifier.clickable { forced = true } else Modifier),
+            contentAlignment = Alignment.Center
+        ) {
+            if (tapToLoad) Icon(Icons.Default.Image, null, tint = Slate)
+        }
+    } else {
+        val bmp by produceState<ImageBitmap?>(null, url) { value = ImageCache.load(url) }
+        val b = bmp
+        if (b != null) Image(b, null, modifier, contentScale = contentScale) else Box(modifier.background(Line))
+    }
 }
 
 @Composable
 fun Flag(code: String, size: Dp = 22.dp) {
-    RemoteImage(flagUrl(code), Modifier.size(size).clip(CircleShape).border(1.5.dp, Color.White, CircleShape), ContentScale.Crop)
+    RemoteImage(flagUrl(code), Modifier.size(size).clip(CircleShape).border(1.5.dp, Color.White, CircleShape), ContentScale.Crop, essential = true)
 }

@@ -1,6 +1,29 @@
 package io.mudapay.mobile
 
+import android.Manifest
 import android.app.Activity
+import android.content.Intent
+import android.os.Build
+import android.view.WindowManager
+import android.content.pm.PackageManager
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import android.widget.Toast
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.core.content.ContextCompat
+import androidx.compose.ui.platform.LocalContext
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import android.graphics.Color as AColor
 import android.os.Bundle
 import androidx.activity.compose.BackHandler
@@ -28,16 +51,28 @@ import androidx.core.view.WindowCompat
 class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Session.init(this)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         window.statusBarColor = AColor.TRANSPARENT
         window.navigationBarColor = AColor.TRANSPARENT
+        routeFrom(intent)
         setContent { MudaPayApp() }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        routeFrom(intent)
+    }
+
+    override fun onStart() { super.onStart(); AppLock.onForeground() }
+    override fun onStop() { super.onStop(); AppLock.onBackground() }
+
+    private fun routeFrom(i: Intent?) {
+        i?.getStringExtra("route")?.let { Ui.pendingRoute = it }
     }
 }
 
 @Composable
-private fun SystemBars(darkIcons: Boolean) {
+fun SystemBars(darkIcons: Boolean) {
     val view = LocalView.current
     SideEffect {
         val window = (view.context as? Activity)?.window ?: return@SideEffect
@@ -49,22 +84,27 @@ private fun SystemBars(darkIcons: Boolean) {
 
 @Composable
 fun MudaPayApp() {
+    val act = LocalContext.current.findActivity()
+    SideEffect {
+        if (AppLock.hideScreen) act?.window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else act?.window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+    }
     MaterialTheme(colorScheme = lightColorScheme(primary = Green, secondary = Blue, background = Page, surface = Color.White, onSurface = Ink)) {
         Surface(Modifier.fillMaxSize(), color = Page) {
-            if (Session.signedIn) SignedIn() else AuthFlow()
+            if (Session.signedIn) { if (AppLock.locked) LockScreen() else SignedIn() } else AuthFlow()
 
             Ui.title?.let { t ->
                 AlertDialog(
                     onDismissRequest = { Ui.clear() }, containerColor = Color.White,
-                    confirmButton = { TextButton(onClick = { Ui.clear() }) { Text("OK", color = GreenDark, fontWeight = FontWeight.Bold) } },
+                    confirmButton = { TextButton(onClick = { Ui.clear() }) { Text(L("OK"), color = GreenDark, fontWeight = FontWeight.Bold) } },
                     title = { Text(t, fontWeight = FontWeight.Black) }, text = { Text(Ui.message) }
                 )
             }
             Session.blockedMessage?.let { m ->
                 AlertDialog(
                     onDismissRequest = { Session.blockedMessage = null }, containerColor = Color.White,
-                    confirmButton = { TextButton(onClick = { Session.blockedMessage = null }) { Text("OK", color = GreenDark, fontWeight = FontWeight.Bold) } },
-                    title = { Text("Account blocked", fontWeight = FontWeight.Black) }, text = { Text(m) }
+                    confirmButton = { TextButton(onClick = { Session.blockedMessage = null }) { Text(L("OK"), color = GreenDark, fontWeight = FontWeight.Bold) } },
+                    title = { Text(L("Account blocked"), fontWeight = FontWeight.Black) }, text = { Text(m) }
                 )
             }
         }
@@ -76,11 +116,17 @@ fun MudaPayApp() {
 private fun AuthFlow() {
     var screen by remember { mutableStateOf("Welcome") }
     var phone by remember { mutableStateOf("") }
+    var google by remember { mutableStateOf<GoogleAuth.Outcome.NeedsProfile?>(null) }
     SystemBars(darkIcons = false)
     BackHandler(enabled = screen != "Welcome") { screen = "Welcome" }
+    val toProfile: (GoogleAuth.Outcome.NeedsProfile) -> Unit = { google = it; screen = "GoogleProfile" }
     when (screen) {
-        "Login" -> AuthScreen(false, phone, { screen = "Welcome" }, { screen = "Register" }, {})
-        "Register" -> AuthScreen(true, "", { screen = "Welcome" }, { screen = "Login" }, { p -> phone = p; screen = "Login" })
+        "Login" -> AuthScreen(false, phone, { screen = "Welcome" }, { screen = "Register" }, {}, toProfile)
+        "Register" -> AuthScreen(true, "", { screen = "Welcome" }, { screen = "Login" }, { p -> phone = p; screen = "Login" }, toProfile)
+        "GoogleProfile" -> {
+            val g = google
+            if (g != null) GoogleProfileScreen(g) { screen = "Login" } else LaunchedEffect(Unit) { screen = "Welcome" }
+        }
         else -> WelcomeScreen({ screen = "Login" }, { screen = "Register" })
     }
 }
@@ -89,11 +135,18 @@ private fun AuthFlow() {
 @Composable
 private fun SignedIn() {
     var error by remember { mutableStateOf<String?>(null) }
+    var errOffline by remember { mutableStateOf(false) }
     var tick by remember { mutableIntStateOf(0) }
-    LaunchedEffect(tick) {
+    LaunchedEffect(tick, Offline.networkUp) {
         if (Session.user == null) {
             val r = Api.call("GET", "/me")
-            if (r.ok) Session.updateUser(r.data) else error = r.message
+            if (r.ok) { Session.updateUser(r.data); error = null } else { error = r.message; errOffline = r.code == "network" }
+        }
+    }
+    LaunchedEffect(Ui.pendingRoute) {
+        if (Ui.pendingRoute != null && Session.user?.bool("paid") == false) {
+            val r = Api.call("GET", "/me")
+            if (r.ok) Session.updateUser(r.data)
         }
     }
     val user = Session.user
@@ -102,7 +155,7 @@ private fun SignedIn() {
             SystemBars(darkIcons = true)
             Box(Modifier.fillMaxSize().statusBarsPadding(), contentAlignment = Alignment.Center) {
                 val e = error
-                if (e != null) ErrorBox(e) { error = null; tick++ } else LoadingBox()
+                if (e != null) ErrorBox(e, { error = null; tick++ }, errOffline) else LoadingBox()
             }
         }
         !user.bool("paid") -> { SystemBars(darkIcons = false); ActivationScreen() }
@@ -117,64 +170,152 @@ private val TABS = listOf(
 )
 private val TAB_ROUTES = TABS.map { it.route }
 private val GRADIENT_ROUTES = setOf("Home", "Tasks", "Withdraw", "Profile")
+/** Only these routes may be opened (also protects against a bad route inside a push payload). */
+private val KNOWN_ROUTES: Set<String> by lazy { (TAB_ROUTES + MORE_ENTRIES.map { it.route } + listOf("More", "WithdrawalDetail", "Referrals")).toSet() }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MainShell() {
-    val stack = remember { mutableStateListOf("Home") }
-    val route = stack.last()
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val navController = rememberNavController()
+    var refreshing by remember { mutableStateOf(false) }
+    val pullState = rememberPullToRefreshState()
+    fun doRefresh() {
+        if (refreshing) return
+        scope.launch {
+            refreshing = true
+            val ok = refreshEverything()
+            if (!ok) Toast.makeText(ctx, "No connection. Showing saved data.", Toast.LENGTH_SHORT).show()
+            refreshing = false
+        }
+    }
+    val entry by navController.currentBackStackEntryAsState()
+    val route = entry?.destination?.route ?: "Home"
 
     fun nav(r: String) {
-        if (r == route) return
-        if (r in TAB_ROUTES) { stack.clear(); stack.add("Home"); if (r != "Home") stack.add(r) } else stack.add(r)
+        if (r == route || r !in KNOWN_ROUTES) return
+        navController.navigate(r) {
+            if (r in TAB_ROUTES) popUpTo("Home") { inclusive = false }
+            launchSingleTop = true
+        }
     }
-    BackHandler(enabled = stack.size > 1) { stack.removeAt(stack.lastIndex) }
+
+    // Push: register this phone, ask for the notification permission once (Android 13+).
+    val askNotifications = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { Push.sync(ctx) }
+    LaunchedEffect(Unit) {
+        Push.sync(ctx)
+        if (Build.VERSION.SDK_INT >= 33 && !PushPrefs.asked(ctx) &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            PushPrefs.markAsked(ctx)
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    // Push tap -> open the requested screen.
+    LaunchedEffect(Ui.pendingRoute) {
+        Ui.pendingRoute?.let { nav(it); Ui.pendingRoute = null }
+    }
+
     SystemBars(darkIcons = !Ui.immersive && route !in GRADIENT_ROUTES)
+
+    // While the app is open: look for new messages / withdrawal updates every ~90 s and show them as real notifications.
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (!Offline.offline) {
+                val changed = NotifySync.check(ctx)
+                if (changed) {
+                    val me = Api.call("GET", "/me")
+                    if (me.ok && !me.cached) Session.updateUser(me.data)
+                    Ui.refreshTick++
+                }
+            }
+            delay(90_000)
+        }
+    }
+
+    LaunchedEffect(Offline.networkUp) { if (Offline.networkUp) PendingQueue.flush() }
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(20000)
+            if (PendingQueue.size > 0) PendingQueue.flush()
+        }
+    }
+    val showBanner = !Ui.immersive && (Offline.offline || PendingQueue.size > 0)
 
     val isTab = route in TAB_ROUTES
     Column(Modifier.fillMaxSize().background(Page)) {
         if (!isTab) {
-            val title = MORE_ENTRIES.firstOrNull { it.route == route }?.title ?: if (route == "More") "Menu" else route
-            PageHeader(title, onBack = { stack.removeAt(stack.lastIndex) }, trailing = {
+            val title = when (route) {
+                "More" -> "Menu"
+                "WithdrawalDetail" -> "Withdrawal"
+                else -> MORE_ENTRIES.firstOrNull { it.route == route }?.title ?: route
+            }
+            PageHeader(title, onBack = { navController.popBackStack() }, trailing = {
                 if (route != "More") IconButton(onClick = { nav("More") }) { Icon(Icons.Default.Menu, "Menu", tint = Ink) }
             })
         }
-        Box(Modifier.weight(1f).then(if (isTab) Modifier else Modifier.navigationBarsPadding())) {
-            when (route) {
-                "Home" -> DashboardScreen(::nav)
-                "Videos" -> VideosScreen()
-                "Tasks" -> TasksScreen()
-                "Withdraw" -> WithdrawScreen()
-                "Profile" -> ProfileScreen(::nav)
-                "More" -> MoreScreen(::nav)
-                "Share" -> ShareScreen()
-                "Leaderboard" -> LeaderboardScreen()
-                "History" -> HistoryScreen()
-                "Rewards" -> RewardRatesScreen()
-                "Coach" -> CoachScreen()
-                "Notifications" -> NotificationsScreen()
-                "Support" -> SupportScreen()
-                "Settings" -> SettingsScreen()
-                "About" -> AboutScreen()
-                else -> MoreScreen(::nav)
+        PullToRefreshBox(
+            isRefreshing = refreshing,
+            onRefresh = { doRefresh() },
+            state = pullState,
+            modifier = Modifier.weight(1f).then(if (isTab || showBanner) Modifier else Modifier.navigationBarsPadding()),
+            indicator = {
+                PullToRefreshDefaults.Indicator(
+                    state = pullState, isRefreshing = refreshing,
+                    modifier = Modifier.align(Alignment.TopCenter).then(if (isTab) Modifier.statusBarsPadding() else Modifier),
+                    containerColor = Color.White, color = Green
+                )
+            }
+        ) {
+            NavHost(
+                navController, startDestination = "Home", modifier = Modifier.fillMaxSize(),
+                enterTransition = { fadeIn(tween(160)) }, exitTransition = { fadeOut(tween(100)) },
+                popEnterTransition = { fadeIn(tween(160)) }, popExitTransition = { fadeOut(tween(100)) }
+            ) {
+                composable("Home") { DashboardScreen(::nav) }
+                composable("Videos") { VideosScreen() }
+                composable("Tasks") { TasksScreen() }
+                composable("Withdraw") { WithdrawScreen(::nav) }
+                composable("Profile") { ProfileScreen(::nav) }
+                composable("More") { MoreScreen(::nav) }
+                composable("Share") { NeedsInternet { ShareScreen() } }
+                composable("Referrals") { ReferralsScreen() }
+                composable("Leaderboard") { LeaderboardScreen() }
+                composable("History") { HistoryScreen() }
+                composable("Rewards") { RewardRatesScreen() }
+                composable("Coach") { NeedsInternet { CoachScreen(::nav) } }
+                composable("Notifications") { NotificationsScreen() }
+                composable("Support") { NeedsInternet { SupportScreen() } }
+                composable("Settings") { SettingsScreen(::nav) }
+                composable("ShareApp") { ShareAppScreen() }
+                composable("About") { AboutScreen() }
+                composable("WithdrawalDetail") { WithdrawalDetailScreen() }
             }
         }
+        if (showBanner) OfflineBanner(if (isTab) Modifier else Modifier.navigationBarsPadding())
         if (isTab && !Ui.immersive) BottomBar(route, ::nav)
     }
 }
 
 @Composable
 private fun BottomBar(route: String, onSelect: (String) -> Unit) {
-    val shape = RoundedCornerShape(topStart = 25.dp, topEnd = 25.dp)
+    val shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
     Row(
-        Modifier.fillMaxWidth().shadow(14.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x33000000)).background(Color.White, shape)
-            .navigationBarsPadding().padding(vertical = 10.dp),
+        Modifier.fillMaxWidth().shadow(18.dp, shape, ambientColor = Color(0x330F172A), spotColor = Color(0x330F172A)).background(Color.White, shape)
+            .navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceAround
     ) {
         TABS.forEach { tab ->
             val on = tab.route == route
-            Column(Modifier.weight(1f).clickable { onSelect(tab.route) }.padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(tab.icon, tab.label, tint = if (on) Green else Slate, modifier = Modifier.size(25.dp))
-                Text(tab.label, color = if (on) Green else Slate, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            val tint by androidx.compose.animation.animateColorAsState(if (on) Green else Slate, tween(180), label = "tab")
+            Column(
+                Modifier.weight(1f).padding(horizontal = 3.dp)
+                    .background(if (on) Green.copy(alpha = .12f) else Color.Transparent, RoundedCornerShape(18.dp))
+                    .clickable { onSelect(tab.route) }.padding(vertical = 7.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Icon(tab.icon, tab.label, tint = tint, modifier = Modifier.size(if (on) 26.dp else 24.dp))
+                Text(tab.label, color = tint, fontSize = 10.sp, fontWeight = if (on) FontWeight.ExtraBold else FontWeight.Bold)
             }
         }
     }

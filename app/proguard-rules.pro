@@ -1,0 +1,5 @@
+-dontwarn org.slf4j.**
+-dontwarn javax.annotation.**
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**

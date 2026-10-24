@@ -3,6 +3,18 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// Push notifications: the Firebase plugin is only applied when you add app/google-services.json.
+// Without that file the app still builds; push is simply switched off.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
+}
+// Stable signing key. Google sign-in only works when the app's SHA-1 fingerprint is registered in Google Cloud,
+// and GitHub's runners create a NEW random debug key on every run (new SHA-1 every build = Google sign-in fails).
+// CI writes your own keystore to app/mudapay.keystore from a secret (see README), so every build has the same SHA-1.
+val mudaKeystore = file("mudapay.keystore")
+fun signingValue(name: String): String? = System.getenv(name) ?: (project.findProperty(name) as String?)
+
 android {
     namespace = "io.mudapay.mobile"
     compileSdk = 35
@@ -10,8 +22,29 @@ android {
         applicationId = "io.mudapay.mobile"
         minSdk = 23
         targetSdk = 35
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 8
+        versionName = "2.6.0"
+    }
+    if (mudaKeystore.exists()) {
+        signingConfigs {
+            create("mudapay") {
+                storeFile = mudaKeystore
+                storePassword = signingValue("KEYSTORE_PASSWORD")
+                keyAlias = signingValue("KEY_ALIAS")
+                keyPassword = signingValue("KEY_PASSWORD")
+            }
+        }
+        buildTypes {
+            getByName("debug") { signingConfig = signingConfigs.getByName("mudapay") }
+            getByName("release") { signingConfig = signingConfigs.getByName("mudapay") }
+        }
+    }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
     }
     buildFeatures { compose = true }
     compileOptions {
@@ -31,5 +64,18 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview:1.7.6")
     implementation("androidx.compose.material3:material3:1.3.1")
     implementation("androidx.compose.material:material-icons-extended:1.7.6")
+    implementation("androidx.navigation:navigation-compose:2.8.5")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("androidx.biometric:biometric:1.1.0")
+    // Background check for new notifications (also restarted after a reboot)
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+    implementation("com.google.zxing:core:3.5.3")
+    // Sign in with Google (Credential Manager + Google ID)
+    implementation("androidx.credentials:credentials:1.3.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-messaging")
     debugImplementation("androidx.compose.ui:ui-tooling:1.7.6")
 }

@@ -15,10 +15,17 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.io.DataOutputStream
-import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLPeerUnverifiedException
+import okhttp3.CertificatePinner
+import okhttp3.HttpUrl.Companion.toHttpUrl
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -53,7 +60,9 @@ class ApiResult(
     val data: JSONObject,
     val code: String,
     val message: String,
-    val error: JSONObject? = null
+    val error: JSONObject? = null,
+    val cached: Boolean = false,
+    val cachedAt: Long = 0L
 )
 
 class Upload(val field: String, val filename: String, val mime: String, val bytes: ByteArray)
@@ -120,6 +129,7 @@ object Session {
     }
 
     fun saveTokens(t: JSONObject) {
+        val wasSignedIn = signedIn
         accessToken = t.str("access_token")
         refreshToken = t.str("refresh_token")
         prefs?.edit()
@@ -127,6 +137,7 @@ object Session {
             ?.putString("r", SecureStore.encrypt(refreshToken ?: ""))
             ?.apply()
         signedIn = true
+        if (!wasSignedIn) Push.appOrNull()?.let { NotifyScheduler.schedule(it); NotifyScheduler.syncSoon(it) }
     }
 
     fun updateUser(u: JSONObject) {
@@ -138,10 +149,29 @@ object Session {
         accessToken = null
         refreshToken = null
         prefs?.edit()?.clear()?.apply()
+        OfflineCache.clear()
+        PendingQueue.clear()
         user = null
         balance = 0.0
         unread = 0
         signedIn = false
+        AppLock.reset()
+        Push.appOrNull()?.let { NotifyScheduler.cancel(it); NotifySync.reset(it); Push.cancelAll(it) }
+    }
+}
+
+/* ---------------------------------------------------------------- shared OkHttp client */
+object Http {
+    val client: OkHttpClient by lazy {
+        val b = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(false) // money calls must never be silently replayed
+        if (Config.CERT_PINS.isNotEmpty()) {
+            val host = URL(Config.SITE).host
+            val pinner = CertificatePinner.Builder().apply { Config.CERT_PINS.forEach { add(host, it) } }.build()
+            b.certificatePinner(pinner)
+        }
+        b.build()
     }
 }
 
@@ -158,12 +188,20 @@ object Api {
         idem: String? = null,
         timeoutMs: Int = 30000
     ): ApiResult {
+        val cacheKey = if (method == "GET" && auth) OfflineCache.keyFor(path, query) else null
         val used = Session.accessToken
         var r = request(method, path, body, query, auth, idem, timeoutMs, null)
         if (auth && r.http == 401 && Session.refreshToken != null) {
             if (refresh(used)) r = request(method, path, body, query, auth, idem, timeoutMs, null)
         }
         afterCall(r, auth)
+        if (cacheKey != null) {
+            if (r.ok) OfflineCache.put(cacheKey, r.data)
+            else if (r.code == "network") {
+                val hit = OfflineCache.get(cacheKey)
+                if (hit != null) return ApiResult(200, true, hit.first, "", "", null, true, hit.second)
+            }
+        }
         return r
     }
 
@@ -215,41 +253,36 @@ object Api {
         file: Upload?
     ): ApiResult = withContext(Dispatchers.IO) {
         try {
-            val qs = StringBuilder("i=1") // free hosts such as InfinityFree let API clients through with ?i=1
-            for ((k, v) in query) qs.append('&').append(URLEncoder.encode(k, "UTF-8")).append('=').append(URLEncoder.encode(v, "UTF-8"))
-            val conn = URL(Config.API_BASE + path + "?" + qs).openConnection() as HttpURLConnection
-            conn.requestMethod = method
-            conn.connectTimeout = 20000
-            conn.readTimeout = timeoutMs
-            conn.setRequestProperty("Accept", "application/json")
-            conn.setRequestProperty("User-Agent", "MudaPayAndroid/2.0")
-            if (auth) Session.accessToken?.let { conn.setRequestProperty("Authorization", "Bearer $it") }
-            if (idem != null) conn.setRequestProperty("Idempotency-Key", idem)
+            val url = (Config.API_BASE + path).toHttpUrl().newBuilder().apply {
+                addQueryParameter("i", "1") // free hosts such as InfinityFree let API clients through with ?i=1
+                for ((k, v) in query) addQueryParameter(k, v)
+            }.build()
 
-            if (file != null) {
-                val boundary = "----mudapay" + System.currentTimeMillis()
-                conn.doOutput = true
-                conn.setRequestProperty("Content-Type", "multipart/form-data; boundary=$boundary")
-                DataOutputStream(conn.outputStream).use { out ->
-                    out.writeBytes("--$boundary\r\n")
-                    out.writeBytes("Content-Disposition: form-data; name=\"${file.field}\"; filename=\"${file.filename}\"\r\n")
-                    out.writeBytes("Content-Type: ${file.mime}\r\n\r\n")
-                    out.write(file.bytes)
-                    out.writeBytes("\r\n--$boundary--\r\n")
-                    out.flush()
-                }
-            } else if (method == "POST") {
-                conn.doOutput = true
-                conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                conn.outputStream.use { it.write((body ?: JSONObject()).toString().toByteArray(Charsets.UTF_8)) }
+            val reqBody: RequestBody? = when {
+                file != null -> MultipartBody.Builder().setType(MultipartBody.FORM)
+                    .addFormDataPart(file.field, file.filename, file.bytes.toRequestBody(file.mime.toMediaType()))
+                    .build()
+                method == "GET" || method == "HEAD" -> null
+                else -> (body ?: JSONObject()).toString().toRequestBody("application/json; charset=utf-8".toMediaType())
             }
 
-            val code = conn.responseCode
-            val stream = if (code >= 400) conn.errorStream else conn.inputStream
-            val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() } ?: ""
-            conn.disconnect()
-            parse(code, text)
+            val rb = Request.Builder().url(url)
+                .header("Accept", "application/json")
+                .header("User-Agent", "MudaPayAndroid/2.1")
+            if (auth) Session.accessToken?.let { rb.header("Authorization", "Bearer $it") }
+            if (idem != null) rb.header("Idempotency-Key", idem)
+            rb.method(method, reqBody)
+
+            val client = Http.client.newBuilder().readTimeout(timeoutMs.toLong(), TimeUnit.MILLISECONDS).build()
+            client.newCall(rb.build()).execute().use { resp ->
+                val res = parse(resp.code, resp.body?.string() ?: "")
+                Offline.reportReachable(true)
+                res
+            }
+        } catch (e: SSLPeerUnverifiedException) {
+            ApiResult(0, false, JSONObject(), "tls", "A secure connection to MudaPay could not be verified. Update the app or try another network.")
         } catch (e: Exception) {
+            Offline.reportReachable(false)
             ApiResult(0, false, JSONObject(), "network", "Can't reach MudaPay. Check your connection and try again.")
         }
     }

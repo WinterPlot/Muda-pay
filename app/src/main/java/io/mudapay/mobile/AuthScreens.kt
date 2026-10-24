@@ -33,22 +33,23 @@ fun WelcomeScreen(onLogin: () -> Unit, onRegister: () -> Unit) {
             Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(51.dp))
         }
         Spacer(Modifier.height(22.dp))
-        Text("MudaPay", fontSize = 37.sp, fontWeight = FontWeight.Black, color = Color.White)
-        Text("Grow • Learn • Earn", color = Color.White.copy(alpha = .92f), fontSize = 15.sp)
+        Text(L("MudaPay"), fontSize = 37.sp, fontWeight = FontWeight.Black, color = Color.White)
+        Text(L("Grow • Learn • Earn"), color = Color.White.copy(alpha = .92f), fontSize = 15.sp)
         Spacer(Modifier.height(15.dp))
-        Text("Your everyday space for learning, sharing and earning rewards.", color = Color.White, fontSize = 15.sp, lineHeight = 23.sp)
+        Text(L("Your everyday space for learning, sharing and earning rewards."), color = Color.White, fontSize = 15.sp, lineHeight = 23.sp)
         Spacer(Modifier.height(33.dp))
         PrimaryButton("CREATE ACCOUNT", onRegister, color = Color.White, contentColor = GreenDark)
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = onLogin, modifier = Modifier.fillMaxWidth().height(52.dp), shape = RoundedCornerShape(18.dp),
             border = androidx.compose.foundation.BorderStroke(1.5.dp, Color.White), colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)) {
-            Text("LOG IN", fontWeight = FontWeight.ExtraBold)
+            Text(L("LOG IN"), fontWeight = FontWeight.ExtraBold)
         }
     }
 }
 
 @Composable
-fun AuthScreen(register: Boolean, prefillPhone: String, onBack: () -> Unit, onSwitch: () -> Unit, onRegistered: (String) -> Unit) {
+fun AuthScreen(register: Boolean, prefillPhone: String, onBack: () -> Unit, onSwitch: () -> Unit, onRegistered: (String) -> Unit,
+               onGoogleProfile: (GoogleAuth.Outcome.NeedsProfile) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var fullName by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf(prefillPhone) }
@@ -89,15 +90,14 @@ fun AuthScreen(register: Boolean, prefillPhone: String, onBack: () -> Unit, onSw
                     if (tokens != null && user != null) { Session.saveTokens(tokens); Session.updateUser(user) }
                     else error = "Unexpected answer from the server."
                 } else {
-                    val reason = r.error?.str("reason") ?: ""
-                    error = if (r.code == "account_banned" || r.code == "account_deleted") r.message + if (reason.isNotEmpty()) " Reason: $reason" else "" else r.message
+                    error = authErrorMessage(r)
                 }
             }
         }
     }
 
     Column(Modifier.fillMaxSize().background(Gradient).statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(22.dp)) {
-        Text("‹  Back", color = Color.White, modifier = Modifier.clickable { onBack() }.padding(vertical = 10.dp))
+        Text(L("‹  Back"), color = Color.White, modifier = Modifier.clickable { onBack() }.padding(vertical = 10.dp))
         Spacer(Modifier.height(16.dp))
         Text(if (register) "Create your account" else "Welcome back", color = Color.White, fontSize = 29.sp, fontWeight = FontWeight.Black)
         Text(if (register) "Join the MudaPay community" else "Log in to your MudaPay account", color = Color.White.copy(alpha = .88f))
@@ -122,6 +122,7 @@ fun AuthScreen(register: Boolean, prefillPhone: String, onBack: () -> Unit, onSw
             error?.let { Spacer(Modifier.height(12.dp)); InfoBanner(it, Danger) }
             Spacer(Modifier.height(16.dp))
             PrimaryButton(if (register) "CREATE ACCOUNT" else "LOG IN", { submit() }, loading = busy)
+            GoogleSignInBlock(enabled = !busy, onNeedsProfile = onGoogleProfile)
             Text(if (register) "Already have an account? Log in" else "New to MudaPay? Create account", color = Blue, fontSize = 13.sp,
                 modifier = Modifier.align(Alignment.CenterHorizontally).clickable { onSwitch() }.padding(14.dp))
         }
