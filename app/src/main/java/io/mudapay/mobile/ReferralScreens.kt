@@ -64,7 +64,7 @@ fun ReferralsScreen(vm: ReferralsViewModel = viewModel()) {
         item { InviteCard(user.str("referral_link")) }
         when (st) {
             is ReferralsViewModel.State.Loading -> item { LoadingBox() }
-            is ReferralsViewModel.State.Error -> item { ErrorBox(st.msg) { vm.load() } }
+            is ReferralsViewModel.State.Error -> item { ErrorBox(st.msg, { vm.load() }) }
             is ReferralsViewModel.State.Data -> {
                 val all = st.d.list("items")
                 val sum = st.d.optJSONObject("summary")

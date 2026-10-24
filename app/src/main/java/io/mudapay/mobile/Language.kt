@@ -70,7 +70,6 @@ private val frenchText = mapOf(
     "Activate your account" to "Activer votre compte",
     "AVAILABLE BALANCE" to "SOLDE DISPONIBLE",
     "Payout details" to "Détails du retrait",
-    "Minimum: ${money(symbol, min.toDouble())}" to "Minimum : ${money(symbol, min.toDouble())}",
     "MONTHLY PRIZE" to "PRIX MENSUEL",
     "DAILY TASKS" to "TÂCHES QUOTIDIENNES",
     "GROW • LEARN • EARN" to "GRANDIR • APPRENDRE • GAGNER",
