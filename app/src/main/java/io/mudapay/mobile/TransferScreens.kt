@@ -25,7 +25,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 import org.json.JSONObject
 
 /* ------------------------------------------------------------------ small pieces */
@@ -56,11 +58,22 @@ private fun PersonRow(name: String, sub: String, amount: String? = null, positiv
     }
 }
 
+/** 0.043729 -> "0.043729", 163.88888 -> "163.89": enough digits to be useful, no trailing zeros. */
+fun fmtRate(r: Double): String {
+    val f = when { r >= 100 -> "%.2f"; r >= 1 -> "%.4f"; else -> "%.6f" }
+    return String.format(Locale.US, f, r).trimEnd('0').trimEnd('.')
+}
+
 private fun receiptText(d: JSONObject, symbol: String): String = buildString {
     appendLine("MudaPay transfer receipt")
     appendLine("Reference: ${d.str("reference")}")
     appendLine("Amount: ${money(symbol, d.dbl("amount"))}")
-    appendLine("To: ${d.optJSONObject("recipient")?.str("name").orEmpty()}")
+    if (d.bool("cross_border")) {
+        appendLine("Fee: ${money(symbol, d.dbl("fee"))}")
+        appendLine("Received: ${money(d.str("receive_symbol"), d.dbl("receive_amount"))}")
+    }
+    val rc = d.optJSONObject("recipient")?.str("country").orEmpty()
+    appendLine("To: ${d.optJSONObject("recipient")?.str("name").orEmpty()}${if (rc.isNotEmpty()) " (${countryName(rc)})" else ""}")
     if (d.str("note").isNotEmpty()) appendLine("Note: ${d.str("note")}")
     appendLine("Date: ${d.str("created_at").take(16)}")
     appendLine("Status: Completed")
@@ -68,7 +81,7 @@ private fun receiptText(d: JSONObject, symbol: String): String = buildString {
 
 /** The member's recent transfers in one direction ("out" = sent, "in" = received). */
 @Composable
-private fun TransferList(direction: String, refreshKey: Int, symbol: String) {
+private fun TransferList(direction: String, refreshKey: Int) {
     Remote(refreshKey = refreshKey, call = { Api.call("GET", "/transfers", query = mapOf("direction" to direction)) }) { d, _ ->
         val items = d.list("items")
         if (items.isEmpty()) {
@@ -78,13 +91,16 @@ private fun TransferList(direction: String, refreshKey: Int, symbol: String) {
             val out = t.str("direction") == "out"
             val who = t.optJSONObject("counterparty")
             val note = t.str("note")
+            val cross = t.bool("cross_border")
             val sub = buildString {
                 append(if (out) "To " else "From ")
                 append(who?.str("phone").orEmpty().ifEmpty { "MudaPay" })
+                if (cross && who?.str("country").orEmpty().isNotEmpty()) append(" (").append(countryName(who!!.str("country"))).append(")")
                 append(" • ").append(t.str("created_at").take(16))
+                if (cross) append("\n").append(if (out) "They received " else "They sent ").append(money(t.str("counter_symbol"), t.dbl("counter_amount")))
                 if (note.isNotEmpty()) append("\n").append(note)
             }
-            PersonRow(who?.str("name").orEmpty().ifEmpty { "MudaPay member" }, sub, (if (out) "-" else "+") + money(symbol, t.dbl("amount")), positive = !out)
+            PersonRow(who?.str("name").orEmpty().ifEmpty { "MudaPay member" }, sub, (if (out) "-" else "+") + money(t.str("symbol"), t.dbl("amount")), positive = !out)
         }
     }
 }
@@ -99,7 +115,7 @@ fun SendMoneyScreen(nav: (String) -> Unit) {
         Column(Modifier.fillMaxWidth().background(Gradient, RoundedCornerShape(22.dp)).padding(20.dp)) {
             Text(L("AVAILABLE BALANCE"), color = Color.White.copy(alpha = .85f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.2.sp)
             Text(money(symbol, Session.balance), color = Gold, fontSize = 32.sp, fontWeight = FontWeight.Black)
-            Text(L("Send money to any MudaPay member using their phone number."), color = Color.White.copy(alpha = .9f), fontSize = 13.sp)
+            Text(L("Send money to any MudaPay member, in your country or abroad, using their phone number."), color = Color.White.copy(alpha = .9f), fontSize = 13.sp)
         }
         val sent = done
         if (sent != null) {
@@ -111,7 +127,7 @@ fun SendMoneyScreen(nav: (String) -> Unit) {
             }
         }
         Text(L("Sent recently"), color = Ink, fontWeight = FontWeight.Black, fontSize = 17.sp, modifier = Modifier.padding(top = 6.dp))
-        TransferList("out", recentKey, symbol)
+        TransferList("out", recentKey)
         Spacer(Modifier.height(8.dp))
     }
 }
@@ -126,6 +142,10 @@ private fun SentCard(d: JSONObject, symbol: String, onAgain: () -> Unit, onDone:
         }
         Text(L("Money sent"), color = Dark, fontWeight = FontWeight.Black, fontSize = 20.sp)
         Text(money(symbol, d.dbl("amount")), color = GreenDark, fontWeight = FontWeight.Black, fontSize = 30.sp)
+        if (d.bool("cross_border")) {
+            Text("${L("They receive")} ${money(d.str("receive_symbol"), d.dbl("receive_amount"))}", color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+            Text("${L("Fee")}: ${money(symbol, d.dbl("fee"))} • ${L("Rate")}: 1 $symbol = ${fmtRate(d.dbl("rate"))} ${d.str("receive_symbol")}", color = Muted, fontSize = 12.sp, textAlign = TextAlign.Center)
+        }
         Text("${L("To")} ${who?.str("name").orEmpty()} (${who?.str("phone").orEmpty()})", color = Muted, fontSize = 13.sp, textAlign = TextAlign.Center)
         Text("${L("Reference")}: ${d.str("reference")}", color = Slate, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
         PrimaryButton("SHARE RECEIPT", { shareText(ctx, receiptText(d, symbol)) }, icon = Icons.Default.Share)
@@ -139,11 +159,18 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val symbol = rules.str("symbol")
+    val myCountry = rules.str("country")
     val min = rules.int("min")
     val remaining = rules.dbl("remaining_today")
     val verified = rules.bool("email_verified")
     val needEmail = rules.bool("require_verified_email") && !verified
+    val crossOn = rules.bool("cross_border")
+    val feePct = rules.dbl("fee_pct")
+    val countryList = rules.list("countries")
+    // everyone can pick any supported country; when cross-border sending is paused only the member's own country is offered
+    val countryOptions = countryList.filter { crossOn || it.str("code") == myCountry }.map { it.str("code") to it.str("name") }
 
+    var country by remember { mutableStateOf(myCountry) }
     var phone by remember { mutableStateOf("") }
     var found by remember { mutableStateOf<JSONObject?>(null) }
     var lookupMsg by remember { mutableStateOf<String?>(null) }
@@ -154,21 +181,31 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
     var confirm by remember { mutableStateOf(false) }
     var idem by remember { mutableStateOf(newIdemKey()) }
     var fromQr by remember { mutableStateOf(false) }
+    var quote by remember { mutableStateOf<JSONObject?>(null) }
+    var quoting by remember { mutableStateOf(false) }
+    val pinRequired = rules.bool("pin_required")
+    var askPin by remember { mutableStateOf(false) }
 
-    fun lookup(p: String) {
-        looking = true; lookupMsg = null; found = null
+    fun lookup(p: String, cc: String) {
+        looking = true; lookupMsg = null; found = null; quote = null
         scope.launch {
-            val r = Api.call("POST", "/transfers/lookup", JSONObject().put("phone", p.trim()))
+            val r = Api.call("POST", "/transfers/lookup", JSONObject().put("phone", p.trim()).put("country", cc))
             looking = false
             if (!r.ok) lookupMsg = r.message
-            else if (!r.data.bool("found")) lookupMsg = if (r.data.bool("self")) "That is your own number." else "No MudaPay account uses this number. Check it and try again."
+            else if (!r.data.bool("found")) lookupMsg = if (r.data.bool("self")) "That is your own number." else {
+                val where = r.data.str("country_name")
+                "No MudaPay account uses this number" + (if (where.isNotEmpty()) " in $where" else "") + ". Check the number and the country, then try again."
+            }
             else if (!r.data.bool("can_receive")) lookupMsg = "This member cannot receive money right now."
-            else if (!r.data.bool("same_currency")) lookupMsg = "You can only send money to members in your own country."
-            else found = r.data
+            else if (!r.data.bool("cross_border_allowed")) lookupMsg = "Sending to other countries is paused right now."
+            else { country = r.data.str("country", cc); found = r.data }
         }
     }
 
-    // A QR code was scanned: fill in the number (and amount / note if the code carries them) and look the member up.
+    val cross = found?.let { it.str("country") != myCountry } == true
+    val recvSymbol = found?.str("symbol").orEmpty()
+
+    // A QR code was scanned: fill in the number (and amount / note / country if the code carries them) and look the member up.
     val scanned = PayPrefill.pending
     LaunchedEffect(scanned) {
         if (scanned != null) {
@@ -176,9 +213,22 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
             phone = scanned.phone
             amount = scanned.amount?.toString().orEmpty()
             note = scanned.note
+            if (scanned.country.isNotEmpty() && countryOptions.any { it.first == scanned.country }) country = scanned.country
             fromQr = true
-            if (!needEmail) lookup(scanned.phone)
+            if (!needEmail) lookup(scanned.phone, country)
         }
+    }
+
+    // Across a border, ask the server what the receiver will get (rate + fee) whenever the amount changes.
+    LaunchedEffect(amount, found) {
+        val f = found
+        val amt = amount.toLongOrNull() ?: 0L
+        if (f == null || f.str("country") == myCountry || amt <= 0) { quote = null; quoting = false; return@LaunchedEffect }
+        quoting = true
+        delay(400)
+        val r = Api.call("POST", "/transfers/quote", JSONObject().put("country", f.str("country")).put("amount", amt))
+        quoting = false
+        quote = if (r.ok) r.data else null
     }
 
     if (!verified) {
@@ -191,19 +241,24 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
 
     Column(Modifier.fillMaxWidth().card().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(L("Recipient"), color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+        if (countryOptions.size > 1) {
+            Dropdown(L("Recipient's country"), country, countryOptions) { country = it; found = null; quote = null; lookupMsg = null; fromQr = false }
+        }
+        val dial = countryList.firstOrNull { it.str("code") == country }?.str("dial").orEmpty()
         InputField(
-            "Phone number (with country code)", phone,
-            { phone = it.filter { c -> c.isDigit() || c == '+' || c == ' ' }.take(20); found = null; lookupMsg = null; fromQr = false },
+            if (dial.isNotEmpty()) "Phone number (+$dial …)" else "Phone number (with country code)", phone,
+            { phone = it.filter { c -> c.isDigit() || c == '+' || c == ' ' }.take(20); found = null; quote = null; lookupMsg = null; fromQr = false },
             keyboard = KeyboardType.Phone
         )
         PrimaryButton("FIND MEMBER", {
-            lookup(phone)
+            lookup(phone, country)
         }, loading = looking, enabled = phone.count { it.isDigit() } >= 6 && !needEmail, color = Dark, icon = Icons.Default.Search)
         lookupMsg?.let { InfoBanner(it, Danger, Icons.Default.Info) }
     }
 
     val f = found
     if (f != null) {
+        val q = quote
         Column(Modifier.fillMaxWidth().card().padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (fromQr) InfoBanner(L("Scanned from a MudaPay QR code. Check the name below before you pay."), Blue, Icons.Default.QrCodeScanner)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -211,12 +266,26 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(f.str("name"), color = Dark, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
-                    Text(f.str("phone"), color = Muted, fontSize = 12.sp)
+                    Text("${f.str("phone")} • ${f.str("country_name").ifEmpty { countryName(f.str("country")) }}", color = Muted, fontSize = 12.sp)
                 }
-                Pill("MUDAPAY MEMBER", GreenDark)
+                Pill(if (cross) "ABROAD" else "MUDAPAY MEMBER", if (cross) Blue else GreenDark)
             }
-            InputField("Amount ($symbol)", amount, { amount = it.filter { c -> c.isDigit() }.take(12) }, keyboard = KeyboardType.Number)
+            InputField("Amount you send ($symbol)", amount, { amount = it.filter { c -> c.isDigit() }.take(12) }, keyboard = KeyboardType.Number)
             Text(L("Minimum: ${money(symbol, min.toDouble())} • You can still send ${money(symbol, remaining)} today"), color = Muted, fontSize = 12.sp)
+            if (cross) {
+                if (q != null) {
+                    Column(Modifier.fillMaxWidth().background(GreenDark.copy(alpha = .08f), RoundedCornerShape(14.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(L("They receive"), color = Muted, fontSize = 12.sp)
+                        Text(money(recvSymbol, q.dbl("receive_amount")), color = GreenDark, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                        Text("${L("Rate")}: 1 $symbol = ${fmtRate(q.dbl("rate"))} $recvSymbol", color = Muted, fontSize = 12.sp)
+                        Text("${L("Fee")}: ${money(symbol, q.dbl("fee"))} (${fmtRate(q.dbl("fee_pct"))}%)", color = Muted, fontSize = 12.sp)
+                    }
+                } else if (quoting) {
+                    Text(L("Calculating…"), color = Muted, fontSize = 12.sp)
+                } else {
+                    Text(L("Enter an amount to see what ${f.str("name")} will receive in $recvSymbol. Fee: ${fmtRate(feePct)}%."), color = Muted, fontSize = 12.sp)
+                }
+            }
             InputField("Note (optional)", note, { note = it.take(120) })
             PrimaryButton("SEND MONEY", {
                 val amt = amount.toLongOrNull() ?: 0L
@@ -224,14 +293,45 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
                     amt < min -> Ui.notify("Send money", "The minimum transfer is ${money(symbol, min.toDouble())}.")
                     amt > Session.balance -> Ui.notify("Send money", "Insufficient balance.")
                     amt > remaining -> Ui.notify("Send money", "This is above your daily sending limit. You can still send ${money(symbol, remaining)} today.")
+                    cross && q == null -> Ui.notify("Send money", "Wait a moment while the exchange rate loads.")
                     else -> confirm = true
                 }
             }, loading = busy, enabled = amount.isNotEmpty() && !needEmail, icon = Icons.Default.NorthEast)
         }
     }
 
+    // Sends the transfer. [pin] is "" when the member has no transaction PIN; the server enforces it either way.
+    fun submit(amt: Long, pin: String) {
+        val f = found ?: return
+        val q = quote
+        busy = true
+        scope.launch {
+            val body = JSONObject().put("phone", phone.trim()).put("amount", amt).put("note", note.trim()).put("country", f.str("country"))
+            if (cross && q != null) body.put("expected_receive", q.dbl("receive_amount"))
+            if (pin.isNotEmpty()) body.put("pin", pin)
+            val r = Api.call("POST", "/transfers", body, idem = idem)
+            busy = false
+            if (r.ok) {
+                idem = newIdemKey()
+                Session.balance = r.data.dbl("balance")
+                val who = r.data.optJSONObject("recipient")
+                Notify.moneySent(r.data.dbl("amount"), who?.str("name").orEmpty(), who?.str("phone").orEmpty(), r.data.str("reference"), r.data.str("note"), Session.balance)
+                amount = ""; note = ""; phone = ""; found = null; quote = null; fromQr = false; country = myCountry
+                onSent(r.data)
+            } else {
+                if (r.http != 0) idem = newIdemKey()
+                // the rate moved while the member was reading: show the new figures and let him confirm again
+                if (r.code == "rate_changed") r.error?.optJSONObject("quote")?.let { quote = it }
+                Ui.notify("Send money", r.message)
+            }
+        }
+    }
+
+    if (askPin) PinPromptDialog("Confirm transfer", onDismiss = { askPin = false }) { pin -> askPin = false; submit(amount.toLongOrNull() ?: 0L, pin) }
+
     if (confirm && f != null) {
         val amt = amount.toLongOrNull() ?: 0L
+        val q = quote
         AlertDialog(
             onDismissRequest = { confirm = false },
             containerColor = Color.White,
@@ -239,6 +339,13 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("${L("To")}: ${f.str("name")} (${f.str("phone")})", color = Ink, fontSize = 14.sp)
+                    if (cross) {
+                        Text("${L("Country")}: ${f.str("country_name").ifEmpty { countryName(f.str("country")) }}", color = Ink, fontSize = 14.sp)
+                        if (q != null) {
+                            Text("${L("They receive")}: ${money(recvSymbol, q.dbl("receive_amount"))}", color = GreenDark, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                            Text("${L("Rate")}: 1 $symbol = ${fmtRate(q.dbl("rate"))} $recvSymbol • ${L("Fee")}: ${money(symbol, q.dbl("fee"))}", color = Muted, fontSize = 12.sp)
+                        }
+                    }
                     if (note.isNotBlank()) Text("${L("Note")}: ${note.trim()}", color = Ink, fontSize = 14.sp)
                     Text(L("Transfers are instant and cannot be undone. Make sure the person is right."), color = Muted, fontSize = 12.sp)
                 }
@@ -246,25 +353,7 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
             confirmButton = {
                 TextButton(onClick = {
                     confirm = false
-                    AppLock.requireForWithdrawal(ctx.findActivity()) {
-                        busy = true
-                        scope.launch {
-                            val body = JSONObject().put("phone", phone.trim()).put("amount", amt).put("note", note.trim())
-                            val r = Api.call("POST", "/transfers", body, idem = idem)
-                            busy = false
-                            if (r.ok) {
-                                idem = newIdemKey()
-                                Session.balance = r.data.dbl("balance")
-                                val who = r.data.optJSONObject("recipient")
-                                Notify.moneySent(r.data.dbl("amount"), who?.str("name").orEmpty(), who?.str("phone").orEmpty(), r.data.str("reference"), r.data.str("note"), Session.balance)
-                                amount = ""; note = ""; phone = ""; found = null; fromQr = false
-                                onSent(r.data)
-                            } else {
-                                if (r.http != 0) idem = newIdemKey()
-                                Ui.notify("Send money", r.message)
-                            }
-                        }
-                    }
+                    AppLock.requireForWithdrawal(ctx.findActivity()) { if (pinRequired) askPin = true else submit(amt, "") }
                 }) { Text(L("Send"), color = GreenDark, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text(L("Cancel"), color = Muted) } }
@@ -274,7 +363,7 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
 
 /* ------------------------------------------------------------------ receive */
 @Composable
-fun ReceiveMoneyScreen() {
+fun ReceiveMoneyScreen(nav: (String) -> Unit) {
     val ctx = LocalContext.current
     val user = Session.user ?: JSONObject()
     val symbol = user.str("symbol")
@@ -282,7 +371,8 @@ fun ReceiveMoneyScreen() {
     val name = user.str("full_name")
     var requested by remember { mutableStateOf("") }
     val amountReq = requested.toLongOrNull()?.takeIf { it > 0 }
-    val payload = remember(phone, amountReq) { if (phone.isBlank()) null else PayQr.build(phone, amountReq) }
+    val myCountry = user.str("country")
+    val payload = remember(phone, amountReq, myCountry) { if (phone.isBlank()) null else PayQr.build(phone, amountReq, country = myCountry) }
     val qrBmp = remember(payload) { payload?.let { DotQr.render(it, 900) } }
     val qr = remember(qrBmp) { qrBmp?.asImageBitmap() }
     val amountLine = amountReq?.let { money(symbol, it.toDouble()) }
@@ -300,6 +390,10 @@ fun ReceiveMoneyScreen() {
                 L("Ask the person to open MudaPay and tap Scan to pay. They see your name before they confirm, and the money is added to your balance instantly."),
                 color = Muted, fontSize = 12.sp, lineHeight = 17.sp, textAlign = TextAlign.Center
             )
+            Text(
+                L("Members in other supported countries can pay you too. You always receive in your own currency."),
+                color = Muted, fontSize = 12.sp, lineHeight = 17.sp, textAlign = TextAlign.Center
+            )
             InputField(L("Amount to request (optional)"), requested, { requested = it.filter { c -> c.isDigit() }.take(12) }, keyboard = KeyboardType.Number)
             PrimaryButton(L("SHARE QR CODE"), {
                 val src = qrBmp
@@ -309,11 +403,12 @@ fun ReceiveMoneyScreen() {
                     if (!DotQr.sharePicture(ctx, card, caption)) Ui.notify("Share", "The QR code could not be shared.")
                 }
             }, enabled = qrBmp != null, icon = Icons.Default.Share)
-            PrimaryButton(L("SHARE MY NUMBER"), { shareText(ctx, "Send me money on MudaPay with my phone number: $phone") }, color = Dark, icon = Icons.Default.Share)
+            PrimaryButton(L("REQUEST MONEY"), { nav("Requests") }, icon = Icons.Default.RequestQuote)
+            PrimaryButton(L("SHARE MY NUMBER"), { shareText(ctx, "Send me money on MudaPay (${countryName(myCountry)}) with my phone number: $phone") }, color = Dark, icon = Icons.Default.Share)
             PrimaryButton(L("COPY NUMBER"), { copyToClipboard(ctx, "MudaPay number", phone); Ui.notify("Copied", "Your number was copied.") }, color = Dark, icon = Icons.Default.ContentCopy)
         }
         Text(L("Received recently"), color = Ink, fontWeight = FontWeight.Black, fontSize = 17.sp, modifier = Modifier.padding(top = 6.dp))
-        TransferList("in", 0, symbol)
+        TransferList("in", 0)
         Spacer(Modifier.height(8.dp))
     }
 }

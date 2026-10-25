@@ -168,6 +168,7 @@ object Push {
     private fun defaultRoute(type: String) = when {
         type.startsWith("withdrawal") -> "Withdraw"
         type == "payment_transfer_in" -> "Receive"
+        type == "payment_request_in" -> "Requests"
         type.startsWith("payment_deposit") -> "Deposit"
         type == "payment_transfer_out" -> "Send"
         type == "email_code_sent" || type == "email_verified" -> "Settings"
@@ -271,6 +272,7 @@ object Push {
         val dedup = when {
             !wd.isNullOrEmpty() -> "wd:$wd:${statusOf(type)}"
             type == "payment_transfer_in" && !ref.isNullOrEmpty() -> "tr:$ref"
+            type == "payment_request_in" && !ref.isNullOrEmpty() -> "rq:$ref"
             type == "payment_deposit" && !ref.isNullOrEmpty() -> "dep:$ref"
             // deposit under review / expired / failed: one alert per reference and status
             type.startsWith("payment_deposit_") && !ref.isNullOrEmpty() -> "dep:$ref:$type"

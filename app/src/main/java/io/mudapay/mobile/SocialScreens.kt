@@ -242,6 +242,7 @@ fun SettingsScreen(nav: (String) -> Unit) {
         AppLanguageSettings()
         LowDataSettings()
         AppLockSettings()
+        TransactionPinSettings()
         PushSettings()
         SignInMethods()
         // Accounts created with Google have no password yet: they can set one (no "current password" to type).

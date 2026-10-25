@@ -79,15 +79,17 @@ import java.util.concurrent.Executors
  * the Send screen asks the server who owns the number, so a forged code cannot show a fake name.
  */
 object PayQr {
-    class Parsed(val phone: String, val amount: Long?, val note: String)
+    class Parsed(val phone: String, val amount: Long?, val note: String, val country: String = "")
 
     private fun cleanPhone(raw: String): String {
         val s = raw.filter { it.isDigit() || it == '+' }
         return (if (s.startsWith("+")) "+" else "") + s.filter { it.isDigit() }
     }
 
-    fun build(phone: String, amount: Long? = null, note: String = ""): String {
+    fun build(phone: String, amount: Long? = null, note: String = "", country: String = ""): String {
         val sb = StringBuilder("mudapay://pay?v=1&p=").append(Uri.encode(cleanPhone(phone)))
+        // the receiver's country lets a member in ANOTHER country resolve a national number (e.g. 712345678) correctly
+        if (country.length in 2..3) sb.append("&c=").append(Uri.encode(country.lowercase()))
         if (amount != null && amount > 0) sb.append("&a=").append(amount)
         val n = note.trim().take(60)
         if (n.isNotEmpty()) sb.append("&n=").append(Uri.encode(n))
@@ -96,11 +98,12 @@ object PayQr {
 
     private fun decode(s: String): String = try { URLDecoder.decode(s, "UTF-8") } catch (e: Exception) { s }
 
-    private fun finish(phone: String, amount: Long?, note: String): Parsed? {
+    private fun finish(phone: String, amount: Long?, note: String, country: String = ""): Parsed? {
         val p = cleanPhone(phone)
         val digits = p.count { it.isDigit() }
         if (digits < 6 || digits > 15) return null
-        return Parsed(p, amount, note.filter { !it.isISOControl() }.trim().take(120))
+        val cc = country.lowercase().filter { it in 'a'..'z' }.take(3)
+        return Parsed(p, amount, note.filter { !it.isISOControl() }.trim().take(120), cc)
     }
 
     /** Returns null when [raw] is not a MudaPay payment code (or a plain phone number). */
@@ -114,6 +117,7 @@ object PayQr {
             var phone = ""
             var amount: Long? = null
             var note = ""
+            var country = ""
             for (part in q.split('&')) {
                 val key = part.substringBefore('=').lowercase()
                 val value = part.substringAfter('=', "")
@@ -121,9 +125,10 @@ object PayQr {
                     "p" -> phone = decode(value.replace("+", "%2B"))
                     "a" -> amount = value.filter { it.isDigit() }.takeIf { it.isNotEmpty() && it.length <= 12 }?.toLongOrNull()?.takeIf { it > 0 }
                     "n" -> note = decode(value)
+                    "c" -> country = decode(value)
                 }
             }
-            return finish(phone, amount, note)
+            return finish(phone, amount, note, country)
         }
         if (lower.startsWith("tel:")) return finish(t.substring(4), null, "")
         if (Regex("^\\+?[0-9][0-9 .()\\-]{4,24}$").matches(t)) return finish(t, null, "")

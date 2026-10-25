@@ -119,5 +119,23 @@ history type `deposit`, push type `payment_deposit`. The app only shows the serv
 
 ## v2.9 — scan to pay (no new endpoints)
 QR codes only carry the receiver's phone (and optionally an amount / note): `mudapay://pay?v=1&p=%2B<phone>[&a=<amount>][&n=<note>]`. The app resolves them with the existing
-`POST /transfers/lookup` (shows the server's name for that number) and pays with `POST /transfers`. The server never trusts the amount in a QR code: the usual minimum, daily limit, balance, email and same-country checks apply.
+`POST /transfers/lookup` (shows the server's name for that number) and pays with `POST /transfers`. The server never trusts the amount in a QR code: the usual minimum, daily limit, balance, email and same-country-or-supported-country checks apply.
 
+## v3.0 — send to other countries
+Same screens (`TransferScreens.kt`), new server behaviour (see `README_API.md`, "Send / receive money"). The sender picks the receiver's country (`GET /transfers/rules` → `countries`),
+`POST /transfers/lookup {phone, country}` returns the receiver's country/currency, `POST /transfers/quote {country, amount}` returns `{receive_amount, rate, fee, fee_pct}` and
+`POST /transfers {phone, amount, country, note, expected_receive}` debits `amount` in the sender's currency and credits `receive_amount` in the receiver's. The app only displays the server quote;
+if the rate moved the server answers `rate_changed` (409) with a fresh `quote`. History items carry `symbol`, `counter_amount`, `counter_symbol`, `cross_border`, `counterparty.country`.
+QR codes now also carry the receiver's country: `mudapay://pay?v=1&p=<phone>&c=<cc>[&a=…][&n=…]` (old codes without `c` still work for same-country payments).
+
+## v3.1 — transaction PIN
+Optional 4–6 digit PIN, turned on/off in Settings (`TransactionPin.kt`). Server: `GET/POST /account/pin`, `POST /account/pin/change`, `POST /account/pin/disable` (see `README_API.md`, "Transaction PIN").
+While it is on, `POST /transfers` and `POST /withdrawals` need `pin` in the body (`pin_required` / `wrong_pin` / `pin_locked` otherwise). The app asks for it after the app-lock check, using `pin_required`
+from `GET /transfers/rules` and `GET /withdrawals/rules`; it never stores the PIN. The server stores only a hash and locks the check for 15 minutes after 5 wrong tries.
+
+## v3.2 — payment requests
+`RequestScreens.kt` (route `Requests`; also reachable from Receive → REQUEST MONEY and More). Server: `lib_request.php`, table `payment_requests`.
+`GET /requests?box=in|out`, `POST /requests {phone, country, amount, note}` (amount in the REQUESTER's currency), `POST /requests/{id}/pay {pin?, expected_pay}` (+ `Idempotency-Key`),
+`POST /requests/{id}/decline`, `POST /requests/{id}/cancel`. Paying runs the normal transfer code (PIN, daily limit, FX, balance lock) and closes the request in the same DB transaction.
+Items for the payer carry `pay: {amount, symbol, fee, rate, receive_amount, receive_symbol, cross_border}` = what he pays so the requester gets at least the requested amount.
+Push type `payment_request_in` (payment category, route `Requests`). Requests expire after 7 days; max 10 open per member.

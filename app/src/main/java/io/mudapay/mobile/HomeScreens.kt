@@ -42,6 +42,7 @@ val MORE_ENTRIES = listOf(
     MoreEntry("Send", "Send money", "Pay a member with their phone number", Icons.Default.NorthEast),
     MoreEntry("Scan", "Scan to pay", "Scan a MudaPay QR code to pay", Icons.Default.QrCodeScanner),
     MoreEntry("Receive", "Receive money", "Your QR code and money received", Icons.Default.QrCode2),
+    MoreEntry("Requests", "Payment requests", "Ask a member to pay you, or pay a request", Icons.Default.RequestQuote),
     MoreEntry("Deposit", "Deposit", "Add money with crypto", Icons.Default.AddCard),
     MoreEntry("Withdraw", "Withdraw", "Request a payout", Icons.Default.SouthWest),
     MoreEntry("Rewards", "Reward rates", "What each activity pays", Icons.Default.Percent),

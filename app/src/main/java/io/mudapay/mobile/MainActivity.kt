@@ -291,7 +291,8 @@ private fun MainShell() {
                 composable("About") { AboutScreen() }
                 composable("WithdrawalDetail") { WithdrawalDetailScreen() }
                 composable("Send") { NeedsInternet { SendMoneyScreen(::nav) } }
-                composable("Receive") { NeedsInternet { ReceiveMoneyScreen() } }
+                composable("Receive") { NeedsInternet { ReceiveMoneyScreen(::nav) } }
+                composable("Requests") { NeedsInternet { RequestsScreen(::nav) } }
                 composable("Scan") { NeedsInternet { ScanPayScreen(::nav) } }
                 composable("Deposit") { NeedsInternet { DepositScreen(::nav) } }
             }

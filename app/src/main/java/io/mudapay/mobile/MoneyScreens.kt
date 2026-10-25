@@ -186,6 +186,36 @@ private fun WithdrawForm(rules: JSONObject, reloadKey: Int, onOpen: (JSONObject)
     var coin by remember { mutableStateOf(coins.firstOrNull()?.str("code") ?: "") }
     var busy by remember { mutableStateOf(false) }
     var idem by remember { mutableStateOf(newIdemKey()) }
+    val pinRequired = rules.bool("pin_required")
+    var askPin by remember { mutableStateOf(false) }
+
+    // Sends the request. [pin] is "" when the member has no transaction PIN; the server enforces it either way.
+    fun submit(amt: Long, pin: String) {
+        busy = true
+        scope.launch {
+            val body = JSONObject().put("amount", amt).put("method", method).put("account_number", account.trim())
+            if (method == "Crypto") body.put("crypto_currency", coin)
+            if (pin.isNotEmpty()) body.put("pin", pin)
+            val r = Api.call("POST", "/withdrawals", body, idem = idem)
+            busy = false
+            if (r.ok) {
+                idem = newIdemKey()
+                Session.balance = r.data.dbl("balance")
+                val sentAmount = if (r.data.has("amount")) r.data.dbl("amount") else amt.toDouble()
+                Notify.withdrawalRequested(sentAmount, method, account, Session.balance, if (r.data.has("amount_usd")) r.data.dbl("amount_usd") else null, if (method == "Crypto") coin else null)
+                NotifySync.markWithdrawalOpen(ctx)
+                NotifySync.kick(ctx)
+                Ui.notify("You withdrew ${money(symbol, sentAmount)}", "Your ${money(symbol, sentAmount)} withdrawal via ${if (method == "Crypto") "crypto" else method} is pending review. You'll get a notification as soon as it is paid.")
+                amount = ""; account = ""
+                onSubmitted()
+            } else {
+                if (r.http != 0) idem = newIdemKey()
+                Ui.notify("Withdraw", r.message)
+            }
+        }
+    }
+
+    if (askPin) PinPromptDialog("Confirm withdrawal", onDismiss = { askPin = false }) { pin -> askPin = false; submit(amount.toLongOrNull() ?: 0L, pin) }
 
     if (pending != null) {
         InfoBanner("You have a pending withdrawal of ${money(symbol, pending.dbl("amount"))} via ${pending.str("method")}. You can request another one after it is processed.", Blue, Icons.Default.HourglassTop)
@@ -216,29 +246,7 @@ private fun WithdrawForm(rules: JSONObject, reloadKey: Int, onOpen: (JSONObject)
                     amt < min -> Ui.notify("Withdraw", "Minimum withdrawal is ${money(symbol, min.toDouble())}.")
                     account.isBlank() -> Ui.notify("Withdraw", if (method == "Crypto") "Please paste your wallet address." else "Please enter your payment account or phone number.")
                     method == "Crypto" && coin.isEmpty() -> Ui.notify("Withdraw", "Please choose a cryptocurrency.")
-                    else -> AppLock.requireForWithdrawal(ctx.findActivity()) {
-                        busy = true
-                        scope.launch {
-                            val body = JSONObject().put("amount", amt).put("method", method).put("account_number", account.trim())
-                            if (method == "Crypto") body.put("crypto_currency", coin)
-                            val r = Api.call("POST", "/withdrawals", body, idem = idem)
-                            busy = false
-                            if (r.ok) {
-                                idem = newIdemKey()
-                                Session.balance = r.data.dbl("balance")
-                                val sentAmount = if (r.data.has("amount")) r.data.dbl("amount") else amt.toDouble()
-                                Notify.withdrawalRequested(sentAmount, method, account, Session.balance, if (r.data.has("amount_usd")) r.data.dbl("amount_usd") else null, if (method == "Crypto") coin else null)
-                                NotifySync.markWithdrawalOpen(ctx)
-                                NotifySync.kick(ctx)
-                                Ui.notify("You withdrew ${money(symbol, sentAmount)}", "Your ${money(symbol, sentAmount)} withdrawal via ${if (method == "Crypto") "crypto" else method} is pending review. You'll get a notification as soon as it is paid.")
-                                amount = ""; account = ""
-                                onSubmitted()
-                            } else {
-                                if (r.http != 0) idem = newIdemKey()
-                                Ui.notify("Withdraw", r.message)
-                            }
-                        }
-                    }
+                    else -> AppLock.requireForWithdrawal(ctx.findActivity()) { if (pinRequired) askPin = true else submit(amt, "") }
                 }
             }, loading = busy, enabled = method.isNotEmpty())
         }
