@@ -3,6 +3,17 @@ package io.mudapay.mobile
 import android.app.Activity
 import android.os.Build
 import android.util.Log
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Redeem
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -165,7 +176,7 @@ fun GoogleSignInBlock(enabled: Boolean, onNeedsProfile: (GoogleAuth.Outcome.Need
     var error by remember { mutableStateOf<String?>(null) }
     Column(Modifier.fillMaxWidth()) {
         OrDivider()
-        GoogleButton("Continue with Google", {
+        GoogleButton(L("Continue with Google"), {
             val activity = ctx.findActivity() ?: return@GoogleButton
             error = null; busy = true
             scope.launch {
@@ -216,42 +227,49 @@ fun GoogleProfileScreen(info: GoogleAuth.Outcome.NeedsProfile, onBack: () -> Uni
         }
     }
 
-    Column(Modifier.fillMaxSize().background(Gradient).statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(22.dp)) {
-        Text(L("‹  Back"), color = Color.White, modifier = Modifier.clickable { onBack() }.padding(vertical = 10.dp))
-        Spacer(Modifier.height(16.dp))
-        Text(L("One last step"), color = Color.White, fontSize = 29.sp, fontWeight = FontWeight.Black)
-        Text(L("Your MudaPay account is based on your phone number."), color = Color.White.copy(alpha = .88f))
+    Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 22.dp, vertical = 14.dp)) {
+        AuthTopBar(onBack)
         Spacer(Modifier.height(22.dp))
-        Column(Modifier.fillMaxWidth().background(Color.White, RoundedCornerShape(24.dp)).padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+        Reveal(0, Modifier.fillMaxWidth()) {
+            Column(Modifier.fillMaxWidth()) {
+                Text(L("One last step"), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Black, letterSpacing = (-.5).sp)
+                Spacer(Modifier.height(4.dp))
+                Text(L("Your MudaPay account is based on your phone number."), color = Color.White.copy(alpha = .9f), fontSize = 15.sp)
+            }
+        }
+        Spacer(Modifier.height(22.dp))
+        AuthCard {
+            Row(Modifier.fillMaxWidth().background(Page, RoundedCornerShape(16.dp)).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Image(painterResource(R.drawable.ic_google_g), null, Modifier.size(28.dp))
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(12.dp))
                 Column {
                     Text(L("Signed in with Google"), color = GreenDark, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, letterSpacing = .5.sp)
                     if (info.email.isNotEmpty()) Text(info.email, color = Muted, fontSize = 12.sp)
                 }
             }
             Spacer(Modifier.height(16.dp))
-            InputField("Full name", fullName, { fullName = it })
+            AuthField(L("Full name"), fullName, { fullName = it }, Icons.Default.Person)
             Spacer(Modifier.height(12.dp))
-            InputField("Phone number", phone, { phone = it }, keyboard = KeyboardType.Phone)
+            AuthField(L("Phone number"), phone, { phone = it }, Icons.Default.Phone, keyboard = KeyboardType.Phone)
             Spacer(Modifier.height(12.dp))
-            Dropdown("Country", country, COUNTRIES.map { it.first to it.second }) { country = it }
+            AuthCountryField(country) { country = it }
+            Spacer(Modifier.height(12.dp))
             if (canLink) {
-                Spacer(Modifier.height(12.dp))
-                InputField("Password of this MudaPay account", password, { password = it }, password = !show, trailing = {
-                    IconButton(onClick = { show = !show }) { Icon(if (show) Icons.Default.VisibilityOff else Icons.Default.Visibility, null, tint = Muted) }
-                })
+                AuthField(L("Password of this MudaPay account"), password, { password = it }, Icons.Default.Lock, password = !show, keyboard = KeyboardType.Password,
+                    imeAction = ImeAction.Done, onDone = { submit() }, trailing = { PasswordToggle(show) { show = !show } })
             } else {
-                Spacer(Modifier.height(12.dp))
-                InputField("Referral code (optional)", referral, { referral = it }, keyboard = KeyboardType.Number)
+                AuthField(L("Referral code (optional)"), referral, { referral = it }, Icons.Default.Redeem, keyboard = KeyboardType.Number,
+                    imeAction = ImeAction.Done, onDone = { submit() })
             }
-            error?.let { Spacer(Modifier.height(12.dp)); InfoBanner(it, Danger) }
-            Spacer(Modifier.height(16.dp))
-            PrimaryButton(if (canLink) "LINK GOOGLE & CONTINUE" else "CONTINUE", { submit() }, loading = busy)
-            Spacer(Modifier.height(10.dp))
+            AnimatedVisibility(visible = error != null, enter = fadeIn() + expandVertically(), exit = fadeOut() + shrinkVertically()) {
+                Column { Spacer(Modifier.height(14.dp)); InfoBanner(error ?: "", Danger, Icons.Default.ErrorOutline) }
+            }
+            Spacer(Modifier.height(18.dp))
+            AuthButton(if (canLink) L("LINK GOOGLE & CONTINUE") else L("CONTINUE"), { submit() }, loading = busy, arrow = true)
+            Spacer(Modifier.height(12.dp))
             Text(L("Your phone number is used to log in, receive support and withdraw. Use a number you own."), color = Muted, fontSize = 11.sp, lineHeight = 16.sp)
         }
+        Spacer(Modifier.height(24.dp))
     }
 }
 

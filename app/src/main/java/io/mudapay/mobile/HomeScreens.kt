@@ -45,6 +45,7 @@ val MORE_ENTRIES = listOf(
     MoreEntry("Requests", "Payment requests", "Ask a member to pay you, or pay a request", Icons.Default.RequestQuote),
     MoreEntry("Deposit", "Deposit", "Add money with crypto", Icons.Default.AddCard),
     MoreEntry("Withdraw", "Withdraw", "Request a payout", Icons.Default.SouthWest),
+    MoreEntry("AgentDesk", "Agent desk", "Pay cash-outs and earn commission", Icons.Default.Storefront),
     MoreEntry("Rewards", "Reward rates", "What each activity pays", Icons.Default.Percent),
     MoreEntry("Coach", "Muda AI", "Your assistant and free lessons", Icons.Default.AutoAwesome),
     MoreEntry("Notifications", "Notifications", "Account and reward updates", Icons.Default.Notifications),

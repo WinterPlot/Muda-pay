@@ -159,6 +159,7 @@ fun WithdrawScreen(nav: (String) -> Unit) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(13.dp)) {
             Remote(refreshKey = reload, call = { Api.call("GET", "/withdrawals/rules") }) { rules, _ ->
                 WithdrawForm(rules, reload, { w -> Ui.selectedWithdrawal = w; nav("WithdrawalDetail") }) { reload++ }
+                AgentEntryCard(rules, nav)
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -184,6 +185,7 @@ private fun WithdrawForm(rules: JSONObject, reloadKey: Int, onOpen: (JSONObject)
     var method by remember { mutableStateOf(methods.firstOrNull() ?: "") }
     var account by remember { mutableStateOf("") }
     var coin by remember { mutableStateOf(coins.firstOrNull()?.str("code") ?: "") }
+    var agentCode by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var idem by remember { mutableStateOf(newIdemKey()) }
     val pinRequired = rules.bool("pin_required")
@@ -193,12 +195,21 @@ private fun WithdrawForm(rules: JSONObject, reloadKey: Int, onOpen: (JSONObject)
     fun submit(amt: Long, pin: String) {
         busy = true
         scope.launch {
-            val body = JSONObject().put("amount", amt).put("method", method).put("account_number", account.trim())
+            val viaAgent = method == "Agent" || method == "Bureau"
+            val body = JSONObject().put("amount", amt).put("method", method).put("account_number", if (viaAgent) agentCode else account.trim())
+            if (viaAgent) body.put("agent_code", agentCode)
             if (method == "Crypto") body.put("crypto_currency", coin)
             if (pin.isNotEmpty()) body.put("pin", pin)
             val r = Api.call("POST", "/withdrawals", body, idem = idem)
             busy = false
-            if (r.ok) {
+            if (r.ok && (method == "Agent" || method == "Bureau")) {
+                idem = newIdemKey()
+                Session.balance = r.data.dbl("balance")
+                NotifySync.markWithdrawalOpen(ctx)
+                amount = ""; agentCode = ""
+                onSubmitted()
+                onOpen(r.data)      // the detail screen shows the member's 6-digit payout code
+            } else if (r.ok) {
                 idem = newIdemKey()
                 Session.balance = r.data.dbl("balance")
                 val sentAmount = if (r.data.has("amount")) r.data.dbl("amount") else amt.toDouble()
@@ -232,19 +243,25 @@ private fun WithdrawForm(rules: JSONObject, reloadKey: Int, onOpen: (JSONObject)
             Text(L("Payout details"), color = Ink, fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
             InputField("Amount ($symbol)", amount, { amount = it.filter { c -> c.isDigit() } }, keyboard = KeyboardType.Number)
             Text(L("Minimum: ${money(symbol, min.toDouble())}"), color = Muted, fontSize = 12.sp)
-            Dropdown("Payment method", method, methods.map { it to (if (it == "Crypto") "Crypto (USDT, BTC, ETH…)" else it) }) { method = it }
+            Dropdown("Payment method", method, methods.map { it to (when (it) { "Crypto" -> "Crypto (USDT, BTC, ETH…)"; "Agent" -> L("MudaPay Agent (cash)"); "Bureau" -> L("MudaPay Bureau (cash)"); else -> it }) }) { method = it; agentCode = "" }
             val isCrypto = method == "Crypto"
+            val viaAgent = method == "Agent" || method == "Bureau"
             if (isCrypto) {
                 Dropdown("Cryptocurrency", coin, coins.map { it.str("code") to "${it.str("label")} — ${it.str("network")}" }) { coin = it }
                 val usd = if (localPerUsd > 0) (amount.toLongOrNull() ?: 0L) / localPerUsd else 0.0
                 Text("≈ ${"%.2f".format(usd)} USD • minimum ${"%.2f".format(minUsd)} USD", color = Muted, fontSize = 12.sp)
             }
-            InputField(if (isCrypto) "Wallet address" else "Phone number / account", account, { account = it })
+            if (viaAgent) {
+                val agentsInfo = rules.optJSONObject("agents")
+                AgentPickerBlock(method == "Bureau", agentsInfo?.dbl("agent_fee_pct") ?: 0.0, agentCode) { agentCode = it }
+                InfoBanner(L("You get a 6-digit payout code. Give it to the agent ONLY when you hold your cash. Your money is held safely until then, and is refunded if the agent does not answer."), Blue, Icons.Default.Lock)
+            } else InputField(if (isCrypto) "Wallet address" else "Phone number / account", account, { account = it })
             PrimaryButton("REQUEST WITHDRAWAL", {
                 val amt = amount.toLongOrNull() ?: 0L
                 when {
                     amt < min -> Ui.notify("Withdraw", "Minimum withdrawal is ${money(symbol, min.toDouble())}.")
-                    account.isBlank() -> Ui.notify("Withdraw", if (method == "Crypto") "Please paste your wallet address." else "Please enter your payment account or phone number.")
+                    viaAgent && agentCode.length < 6 -> Ui.notify("Withdraw", if (method == "Bureau") "Please choose a bureau." else "Enter the agent code and press CHECK.")
+                    !viaAgent && account.isBlank() -> Ui.notify("Withdraw", if (method == "Crypto") "Please paste your wallet address." else "Please enter your payment account or phone number.")
                     method == "Crypto" && coin.isEmpty() -> Ui.notify("Withdraw", "Please choose a cryptocurrency.")
                     else -> AppLock.requireForWithdrawal(ctx.findActivity()) { if (pinRequired) askPin = true else submit(amt, "") }
                 }
@@ -279,6 +296,8 @@ private val KINDS = mapOf(
     "transfer_out" to Kind("Money sent", Icons.Default.NorthEast, Color(0xFFFEF2F2), Danger),
     "transfer_in" to Kind("Money received", Icons.Default.QrCode2, Color(0xFFF0FFFB), Green),
     "deposit" to Kind("Crypto deposit", Icons.Default.CurrencyBitcoin, Color(0xFFEFF6FF), Color(0xFF2563EB)),
+    "agent_payout" to Kind("Agent cash-out refund", Icons.Default.Storefront, Color(0xFFF0FFFB), Green),
+    "agent_commission" to Kind("Agent commission", Icons.Default.Storefront, Color(0xFFFFFBEB), Color(0xFFF59E0B)),
     "video" to Kind("Video reward", Icons.Default.PlayCircle, Color(0xFFF5F3FF), Color(0xFF7C3AED)),
     "share_reward" to Kind("Share reward", Icons.Default.Share, Color(0xFFFDF2F8), Color(0xFFDB2777)),
     "leaderboard_prize" to Kind("Leaderboard prize", Icons.Default.EmojiEvents, Color(0xFFFFFBEB), Color(0xFFD97706)),

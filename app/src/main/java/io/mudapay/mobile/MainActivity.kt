@@ -16,6 +16,11 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import android.widget.Toast
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.core.content.ContextCompat
@@ -112,22 +117,43 @@ fun MudaPayApp() {
 }
 
 /* ------------------------------------------------------------------ signed out */
+private fun authDepth(s: String) = when (s) { "Welcome" -> 0; "Login", "Register" -> 1; else -> 2 }
+
 @Composable
 private fun AuthFlow() {
     var screen by remember { mutableStateOf("Welcome") }
     var phone by remember { mutableStateOf("") }
     var google by remember { mutableStateOf<GoogleAuth.Outcome.NeedsProfile?>(null) }
     SystemBars(darkIcons = false)
-    BackHandler(enabled = screen != "Welcome") { screen = "Welcome" }
+    BackHandler(enabled = screen != "Welcome") { screen = if (screen == "Forgot") "Login" else "Welcome" }
     val toProfile: (GoogleAuth.Outcome.NeedsProfile) -> Unit = { google = it; screen = "GoogleProfile" }
-    when (screen) {
-        "Login" -> AuthScreen(false, phone, { screen = "Welcome" }, { screen = "Register" }, {}, toProfile)
-        "Register" -> AuthScreen(true, "", { screen = "Welcome" }, { screen = "Login" }, { p -> phone = p; screen = "Login" }, toProfile)
-        "GoogleProfile" -> {
-            val g = google
-            if (g != null) GoogleProfileScreen(g) { screen = "Login" } else LaunchedEffect(Unit) { screen = "Welcome" }
+    // the living gradient is drawn once here; screens slide over it. Login <-> Register share one key so only the form animates.
+    AuthBackdrop {
+        AnimatedContent(
+            targetState = screen,
+            modifier = Modifier.fillMaxSize(),
+            contentKey = { if (it == "Login" || it == "Register") "Auth" else it },
+            transitionSpec = {
+                val fwd = authDepth(targetState) >= authDepth(initialState)
+                val spec = tween<androidx.compose.ui.unit.IntOffset>(430, easing = FastOutSlowInEasing)
+                if (fwd) (fadeIn(tween(380, delayMillis = 110)) + slideInHorizontally(spec) { it / 5 }) togetherWith
+                    (fadeOut(tween(160)) + slideOutHorizontally(spec) { -it / 8 })
+                else (fadeIn(tween(380, delayMillis = 110)) + slideInHorizontally(spec) { -it / 5 }) togetherWith
+                    (fadeOut(tween(160)) + slideOutHorizontally(spec) { it / 8 })
+            },
+            label = "authFlow"
+        ) { s ->
+            when (s) {
+                "Login" -> AuthScreen(false, phone, { screen = "Welcome" }, { screen = "Register" }, {}, toProfile, onForgot = { p -> phone = p; screen = "Forgot" })
+                "Register" -> AuthScreen(true, "", { screen = "Welcome" }, { screen = "Login" }, { p -> phone = p; screen = "Login" }, toProfile)
+                "Forgot" -> ForgotPasswordScreen(phone, { screen = "Login" }) { p -> phone = p; screen = "Login" }
+                "GoogleProfile" -> {
+                    val g = google
+                    if (g != null) GoogleProfileScreen(g) { screen = "Login" } else LaunchedEffect(Unit) { screen = "Welcome" }
+                }
+                else -> WelcomeScreen({ screen = "Login" }, { screen = "Register" })
+            }
         }
-        else -> WelcomeScreen({ screen = "Login" }, { screen = "Register" })
     }
 }
 
@@ -295,6 +321,7 @@ private fun MainShell() {
                 composable("Requests") { NeedsInternet { RequestsScreen(::nav) } }
                 composable("Scan") { NeedsInternet { ScanPayScreen(::nav) } }
                 composable("Deposit") { NeedsInternet { DepositScreen(::nav) } }
+                composable("AgentDesk") { NeedsInternet { AgentDeskScreen() } }
             }
         }
         if (showBanner) OfflineBanner(if (isTab) Modifier else Modifier.navigationBarsPadding())
