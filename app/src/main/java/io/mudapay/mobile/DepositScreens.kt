@@ -72,7 +72,7 @@ fun DepositScreen(nav: (String) -> Unit) {
                 InfoBanner(rules.str("message"), Blue, Icons.Default.Info)
                 OpenDeposits(rules.list("open"), rules.str("symbol"))
             } else {
-                DepositForm(rules) { listKey++ }
+                DepositForm(rules, { listKey++ })
             }
         }
         Text(L("Deposit history"), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 6.dp))
