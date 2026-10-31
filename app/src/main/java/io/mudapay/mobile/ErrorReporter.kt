@@ -50,9 +50,11 @@ object ErrorReporter {
 
     fun init(a: Application) {
         app = a
+        DebugLog.init(a)
         try { pending = dir()?.listFiles()?.isNotEmpty() == true } catch (_: Throwable) { }
         val previous = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
+            try { DebugLog.app("crash", "thread=${thread.name}", "${error.javaClass.name}: ${error.message}", error.stackTraceToString()) } catch (_: Throwable) { }
             try { save("crash", "${error.javaClass.name}: ${error.message}", error.stackTraceToString(), "thread=${thread.name}") } catch (_: Throwable) { }
             if (previous != null) previous.uncaughtException(thread, error)
             else { android.os.Process.killProcess(android.os.Process.myPid()); System.exit(10) }
@@ -66,6 +68,7 @@ object ErrorReporter {
 
     /** Call from a try/catch that swallows an exception you still want to hear about. */
     fun nonFatal(e: Throwable, where: String) {
+        try { DebugLog.app("app", where, "${e.javaClass.name}: ${e.message}", e.stackTraceToString()) } catch (_: Throwable) { }
         try {
             if (!allow("e|$where|${e.javaClass.name}")) return
             save("error", "${e.javaClass.name}: ${e.message}", e.stackTraceToString(), where)
@@ -75,6 +78,7 @@ object ErrorReporter {
 
     /** A problem that is not an exception (a WebView that could not load, a screen in a state it should never reach). */
     fun report(where: String, message: String) {
+        try { DebugLog.app("app", where, message) } catch (_: Throwable) { }
         try {
             if (!allow("r|$where|${message.take(60)}")) return
             save("error", message, "", where)
@@ -86,6 +90,7 @@ object ErrorReporter {
     fun api(method: String, path: String, r: ApiResult) {
         try {
             if (path.startsWith("/client/errors")) return
+            if (!r.ok && !path.startsWith("/debug/")) DebugLog.api(method, path, r)   // local black box for the MudaPay Debug icon
             // server_error = the server already recorded and e-mailed it; network = the phone is just offline
             // unknown route / method_not_allowed / invalid_json = the app asked for something the server does not have: a real bug, not a member mistake
             val reportable = r.code == "bad_response" || r.code == "tls" || (r.code == "not_found" && r.message == "Unknown route.") || r.code == "method_not_allowed" || r.code == "invalid_json" ||

@@ -52,6 +52,14 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Debug viewer: its own task and its own launcher icon "MudaPay Debug" (the alias below). Hidden when Config.DEBUG_TOOLS = false. -->
+        <activity android:name=".DebugActivity" android:exported="false" android:taskAffinity="io.mudapay.mobile.debug" android:launchMode="singleTask" android:screenOrientation="portrait" android:label="MudaPay Debug"/>
+        <activity-alias android:name=".DebugLauncher" android:targetActivity=".DebugActivity" android:exported="true" android:enabled="true" android:label="MudaPay Debug" android:icon="@drawable/ic_debug_launcher">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity-alias>
         <!-- Hands the cached copy of this APK to the app the member picks (read permission is granted per share). -->
         <provider android:name="androidx.core.content.FileProvider" android:authorities="${applicationId}.fileprovider" android:exported="false" android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths"/>
