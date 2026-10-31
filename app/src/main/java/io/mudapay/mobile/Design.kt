@@ -43,11 +43,13 @@ import org.json.JSONObject
 import java.net.URL
 
 /* ------------------------------------------------ design tokens (same palette as mudapay.css :root) */
-val Green = Color(0xFF00BF8E)
-val GreenDark = Color(0xFF008F6A)
-val Blue = Color(0xFF0061FF)
-val Gold = Color(0xFFFFD700)
-val Dark = Color(0xFF0F172A)
+val Green = Color(0xFF0B8F6A)        // brand green: buttons, active states (white text passes contrast)
+val GreenDark = Color(0xFF066B50)    // links, icons and text on white
+val Blue = Color(0xFF2563EB)         // information only
+val Gold = Color(0xFFE9B949)         // used sparingly (rank 1, warnings)
+val Navy = Color(0xFF0B1F3A)         // balance cards, auth screens
+val NavySoft = Color(0xFF14365C)
+val Dark = Color(0xFF0B1F3A)
 val Ink = Color(0xFF1E293B)
 val Muted = Color(0xFF64748B)
 val Line = Color(0xFFE2E8F0)
@@ -56,7 +58,7 @@ val Danger = Color(0xFFEF4444)
 val Slate = Color(0xFF94A3B8)
 val Soft = Color(0xFFF1F5F9)       // quiet fill for chips, inputs and secondary buttons
 val Hairline = Color(0xFFE8EDF3)   // 1 dp borders and dividers
-val Gradient = Brush.linearGradient(listOf(Green, Blue))
+val Gradient = Brush.linearGradient(listOf(Navy, NavySoft))   // calm navy surface (balance card, avatars)
 val CardShape = RoundedCornerShape(20.dp)   // one radius for every card
 val BtnShape = RoundedCornerShape(16.dp)    // one radius for every button and field
 
@@ -95,13 +97,13 @@ fun Modifier.card(shape: RoundedCornerShape = CardShape, color: Color = Color.Wh
         .border(1.dp, Hairline, shape)
 
 /** The green-to-blue hero surface used for balances. Pair it with .padding(…). */
-fun Modifier.heroCard(shape: RoundedCornerShape = RoundedCornerShape(26.dp)): Modifier =
-    this.shadow(8.dp, shape, ambientColor = Green.copy(alpha = .22f), spotColor = Blue.copy(alpha = .30f))
+fun Modifier.heroCard(shape: RoundedCornerShape = RoundedCornerShape(24.dp)): Modifier =
+    this.shadow(6.dp, shape, ambientColor = Color(0x330B1F3A), spotColor = Color(0x400B1F3A))
         .clip(shape)
         .background(Gradient)
         .drawBehind {
-            drawCircle(Color.White.copy(alpha = .08f), radius = size.minDimension * .75f, center = Offset(size.width * .95f, 0f))
-            drawCircle(Color.White.copy(alpha = .05f), radius = size.minDimension * .5f, center = Offset(size.width * .04f, size.height * 1.05f))
+            drawCircle(Color.White.copy(alpha = .05f), radius = size.minDimension * .8f, center = Offset(size.width * 1.0f, 0f))
+            drawCircle(Green.copy(alpha = .16f), radius = size.minDimension * .45f, center = Offset(size.width * .02f, size.height * 1.1f))
         }
 
 /** Rounded square holding an icon, tinted with [tint]. The one icon treatment used everywhere. */
@@ -122,7 +124,7 @@ fun Brand(light: Boolean = false) {
         ) { Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(20.dp)) }
         Column {
             Text(L("MudaPay"), fontWeight = FontWeight.Bold, fontSize = 19.sp, color = if (light) Color.White else Ink, letterSpacing = (-.4).sp)
-            Text(L("Grow • Learn • Earn"), fontSize = 10.sp, fontWeight = FontWeight.Medium, color = if (light) Color.White.copy(alpha = .8f) else Muted)
+            Text(L("Simple, secure payments"), fontSize = 10.sp, fontWeight = FontWeight.Medium, color = if (light) Color.White.copy(alpha = .8f) else Muted)
         }
     }
 }
@@ -134,8 +136,7 @@ fun GradientHeader(modifier: Modifier = Modifier, bottomPadding: Dp = 56.dp, con
     Column(
         modifier.fillMaxWidth().clip(shape).background(Gradient)
             .drawBehind {
-                drawCircle(Color.White.copy(alpha = .08f), radius = size.width * .42f, center = Offset(size.width * .98f, size.height * .05f))
-                drawCircle(Color.White.copy(alpha = .05f), radius = size.width * .28f, center = Offset(size.width * .02f, size.height * .98f))
+                drawCircle(Color.White.copy(alpha = .05f), radius = size.width * .42f, center = Offset(size.width * .98f, size.height * .05f))
             }
             .statusBarsPadding().padding(start = 22.dp, end = 22.dp, top = 16.dp, bottom = bottomPadding),
         content = content
@@ -145,7 +146,7 @@ fun GradientHeader(modifier: Modifier = Modifier, bottomPadding: Dp = 56.dp, con
 /** Large title at the top of a main tab (Home, Videos, Tasks, Withdraw, Profile). */
 @Composable
 fun TabHeader(title: String, subtitle: String? = null, trailing: @Composable RowScope.() -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 20.dp, end = 14.dp, top = 14.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(start = 18.dp, end = 14.dp, top = 14.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, color = Dark, fontSize = 26.sp, fontWeight = FontWeight.Bold, letterSpacing = (-.5).sp)
             if (subtitle != null) Text(subtitle, color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
@@ -158,7 +159,7 @@ fun TabHeader(title: String, subtitle: String? = null, trailing: @Composable Row
 @Composable
 fun HeaderIcon(icon: ImageVector, description: String, onClick: () -> Unit, badge: Int = 0) {
     Box(Modifier.size(42.dp).clip(CircleShape).background(Soft).clickable(onClick = onClick), contentAlignment = Alignment.Center) {
-        BadgedBox(badge = { if (badge > 0) Badge(containerColor = Gold, contentColor = Dark) { Text(if (badge > 99) "99+" else badge.toString()) } }) {
+        BadgedBox(badge = { if (badge > 0) Badge(containerColor = Danger, contentColor = Color.White) { Text(if (badge > 99) "99+" else badge.toString()) } }) {
             Icon(icon, description, tint = Ink, modifier = Modifier.size(21.dp))
         }
     }
@@ -168,8 +169,8 @@ fun HeaderIcon(icon: ImageVector, description: String, onClick: () -> Unit, badg
 @Composable
 fun BalanceHero(label: String, amount: String, caption: String? = null, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit = {}) {
     Column(modifier.fillMaxWidth().heroCard().padding(horizontal = 22.dp, vertical = 20.dp)) {
-        Text(label, color = Color.White.copy(alpha = .85f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
-        Text(amount, color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp, modifier = Modifier.padding(top = 2.dp))
+        Text(label, color = Color.White.copy(alpha = .72f), fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        Text(amount, color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.Bold, letterSpacing = (-1).sp, modifier = Modifier.padding(top = 2.dp))
         if (caption != null) Text(caption, color = Color.White.copy(alpha = .85f), fontSize = 13.sp, modifier = Modifier.padding(top = 2.dp))
         content()
     }
@@ -230,8 +231,8 @@ fun PrimaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifi
     if (color == Green) {
         val active = enabled && !loading
         Box(
-            modifier.fillMaxWidth().height(54.dp).clip(BtnShape)
-                .background(if (enabled) Gradient else Brush.linearGradient(listOf(Green.copy(alpha = .45f), Blue.copy(alpha = .45f))))
+            modifier.fillMaxWidth().height(52.dp).clip(BtnShape)
+                .background(if (enabled) Green else Green.copy(alpha = .40f))
                 .clickable(enabled = active, onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
@@ -450,7 +451,15 @@ object ImageCache {
         val bmp = withContext(Dispatchers.IO) {
             try {
                 val u = if (url.startsWith(Config.SITE)) url + (if (url.contains("?")) "&i=1" else "?i=1") else url
-                URL(u).openStream().use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
+                val conn = URL(u).openConnection().apply { connectTimeout = 10000; readTimeout = 20000 }
+                val bytes = conn.getInputStream().use { it.readBytes() }
+                // decode smaller than the screen needs: far less memory and no stalls on low-end phones (Lite mode: even smaller)
+                val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                val maxDim = if (Offline.lowData) 360 else 720
+                var sample = 1
+                while (bounds.outWidth / (sample * 2) >= maxDim || bounds.outHeight / (sample * 2) >= maxDim) sample *= 2
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })?.asImageBitmap()
             } catch (e: Exception) { null }
         }
         if (bmp != null) cache.put(url, bmp)

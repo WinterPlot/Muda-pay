@@ -191,10 +191,12 @@ private fun SignedIn() {
 
 private class Tab(val route: String, val label: String, val icon: ImageVector)
 private val TABS = listOf(
-    Tab("Home", "Home", Icons.Default.Home), Tab("Videos", "Videos", Icons.Default.PlayCircle), Tab("Tasks", "Tasks", Icons.Default.TaskAlt),
+    Tab("Home", "Home", Icons.Default.Home), Tab("History", "Activity", Icons.Default.History), Tab("RewardsHub", "Rewards", Icons.Default.CardGiftcard),
     Tab("Withdraw", "Withdraw", Icons.Default.AccountBalanceWallet), Tab("Profile", "Profile", Icons.Default.AccountCircle)
 )
-private val TAB_ROUTES = TABS.map { it.route }
+// Tasks and Videos keep the tab layout (bottom bar, big title) but are opened from Rewards
+private val TAB_ROUTES = TABS.map { it.route } + listOf("Tasks", "Videos")
+private fun barRoute(route: String) = if (route == "Tasks" || route == "Videos") "RewardsHub" else route
 private val GRADIENT_ROUTES = emptySet<String>()   // every tab now has a light top, so status-bar icons are always dark
 /** Only these routes may be opened (also protects against a bad route inside a push payload). */
 private val KNOWN_ROUTES: Set<String> by lazy { (TAB_ROUTES + MORE_ENTRIES.map { it.route } + listOf("More", "WithdrawalDetail", "Referrals")).toSet() }
@@ -267,7 +269,7 @@ private fun MainShell() {
             if (PendingQueue.size > 0) PendingQueue.flush()
         }
     }
-    val showBanner = !Ui.immersive && (Offline.offline || PendingQueue.size > 0)
+    val showBanner = !Ui.immersive && (Offline.offline || PendingQueue.size > 0 || Offline.suggestLite)
 
     val isTab = route in TAB_ROUTES
     Column(Modifier.fillMaxSize().background(Page)) {
@@ -301,6 +303,7 @@ private fun MainShell() {
             ) {
                 composable("Home") { DashboardScreen(::nav) }
                 composable("Videos") { VideosScreen() }
+                composable("RewardsHub") { RewardsScreen(::nav) }
                 composable("Tasks") { TasksScreen() }
                 composable("Withdraw") { WithdrawScreen(::nav) }
                 composable("Profile") { ProfileScreen(::nav) }
@@ -327,7 +330,7 @@ private fun MainShell() {
             }
         }
         if (showBanner) OfflineBanner(if (isTab) Modifier else Modifier.navigationBarsPadding())
-        if (isTab && !Ui.immersive) BottomBar(route, ::nav)
+        if (isTab && !Ui.immersive) BottomBar(barRoute(route), ::nav)
     }
 }
 

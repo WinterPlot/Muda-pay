@@ -214,7 +214,7 @@ fun ContactsScreen(nav: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(Modifier.fillMaxWidth().heroCard().padding(20.dp)) {
             Text(softCase(L("PICK CONTACTS TO SEND MONEY")), color = Color.White.copy(alpha = .85f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
-            Text("$members ${L("on MudaPay")}", color = Gold, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text("$members ${L("on MudaPay")}", color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Text("$total ${L("contacts saved")} • ${money(symbol, Session.balance)}", color = Color.White.copy(alpha = .9f), fontSize = 13.sp)
         }
 

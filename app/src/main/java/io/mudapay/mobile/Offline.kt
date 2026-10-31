@@ -41,6 +41,13 @@ object Offline {
         private set
     val offline: Boolean get() = !networkUp || callFailed
 
+    /** The link is slow (about 3G or worse): the app offers Lite mode once. */
+    var slowLink by mutableStateOf(false)
+        private set
+    private var liteDismissed by mutableStateOf(false)
+    val suggestLite: Boolean get() = slowLink && !lowData && !liteDismissed
+    fun dismissLiteSuggestion() { liteDismissed = true; prefs?.edit()?.putBoolean("lite_dismissed", true)?.apply() }
+
     private var prefs: SharedPreferences? = null
     private val live = HashSet<Network>()
 
@@ -48,6 +55,7 @@ object Offline {
         val app = ctx.applicationContext
         prefs = app.getSharedPreferences("mudapay_offline", Context.MODE_PRIVATE)
         lowData = prefs?.getBoolean("low_data", false) ?: false
+        liteDismissed = prefs?.getBoolean("lite_dismissed", false) ?: false
         OfflineCache.init(app)
         PendingQueue.init(app)
         val cm = app.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return
@@ -62,6 +70,10 @@ object Offline {
                         synchronized(live) { live.add(network) }
                         callFailed = false
                         networkUp = true
+                    }
+                    override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                        val kbps = caps.linkDownstreamBandwidthKbps
+                        slowLink = kbps in 1..1500
                     }
                     override fun onLost(network: Network) {
                         synchronized(live) { live.remove(network); networkUp = live.isNotEmpty() }
@@ -84,7 +96,8 @@ object OfflineCache {
     private var dir: File? = null
     private val paths = setOf(
         "/me", "/dashboard", "/tasks", "/videos", "/transactions", "/withdrawals", "/notifications",
-        "/referrals", "/leaderboard", "/campaigns", "/settings"
+        "/referrals", "/leaderboard", "/campaigns", "/settings",
+        "/transfers", "/transfers/rules", "/deposits", "/payfonte/deposits", "/payfonte/card/deposits", "/honeycoin/deposits"
     )
 
     fun init(ctx: Context) { dir = File(ctx.filesDir, "offline").apply { mkdirs() } }
@@ -282,6 +295,19 @@ fun NeedsInternet(content: @Composable () -> Unit) {
 fun OfflineBanner(modifier: Modifier = Modifier) {
     val off = Offline.offline
     val n = PendingQueue.size
+    if (!off && n == 0 && Offline.suggestLite) {
+        Row(
+            modifier.fillMaxWidth().background(Blue).padding(horizontal = 16.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Default.WifiOff, null, tint = Color.White, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(L("Slow connection. Lite mode saves data."), color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            androidx.compose.material3.TextButton(onClick = { Offline.updateLowData(true) }) { Text(L("TURN ON"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp) }
+            androidx.compose.material3.TextButton(onClick = { Offline.dismissLiteSuggestion() }) { Text("✕", color = Color.White, fontSize = 14.sp) }
+        }
+        return
+    }
     if (off || n > 0) {
         val text = when {
             off && n > 0 -> "No connection • $n saved action(s) will be sent later"

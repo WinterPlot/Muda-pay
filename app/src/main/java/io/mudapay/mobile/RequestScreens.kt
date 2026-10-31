@@ -38,7 +38,7 @@ fun RequestsScreen(nav: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(Modifier.fillMaxWidth().heroCard().padding(20.dp)) {
             Text(softCase(L("PAYMENT REQUESTS")), color = Color.White.copy(alpha = .85f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
-            Text(money(Session.user?.str("symbol") ?: "", Session.balance), color = Gold, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+            Text(money(Session.user?.str("symbol") ?: "", Session.balance), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Text(L("Ask a member to pay you, or pay the requests you received."), color = Color.White.copy(alpha = .9f), fontSize = 13.sp)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

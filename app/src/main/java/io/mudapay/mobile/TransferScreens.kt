@@ -59,6 +59,32 @@ private fun PersonRow(name: String, sub: String, amount: String? = null, positiv
 }
 
 /** 0.043729 -> "0.043729", 163.88888 -> "163.89": enough digits to be useful, no trailing zeros. */
+@Composable
+private fun QRow(label: String, value: String, strong: Boolean = false) {
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(label, color = Muted, fontSize = 12.sp)
+        Text(value, color = if (strong) GreenDark else Ink, fontWeight = if (strong) FontWeight.Bold else FontWeight.SemiBold, fontSize = if (strong) 14.sp else 12.sp)
+    }
+}
+
+/** "You send / fee / converted / rate / they receive" — everything the member needs before he confirms. */
+@Composable
+fun QuoteBreakdown(q: JSONObject, symbol: String, recvSymbol: String, compact: Boolean = false) {
+    val amount = q.dbl("amount")
+    val fee = q.dbl("fee")
+    val net = if (q.has("net_amount")) q.dbl("net_amount") else amount - fee
+    Column(Modifier.fillMaxWidth().background(GreenDark.copy(alpha = .08f), RoundedCornerShape(14.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        QRow(L("You send"), money(symbol, amount))
+        QRow("${L("Fee")} (${fmtRate(q.dbl("fee_pct"))}%)", if (fee > 0) "− " + money(symbol, fee) else L("Free"))
+        QRow(L("Amount converted"), money(symbol, net))
+        QRow(L("Rate"), "1 $symbol = ${fmtRate(q.dbl("rate"))} $recvSymbol")
+        Box(Modifier.fillMaxWidth().padding(vertical = 3.dp).height(1.dp).background(GreenDark.copy(alpha = .18f)))
+        Text(L("They receive"), color = Muted, fontSize = 12.sp)
+        Text(money(recvSymbol, q.dbl("receive_amount")), color = GreenDark, fontWeight = FontWeight.Bold, fontSize = if (compact) 18.sp else 24.sp)
+        if (!compact) Text(L("You are charged exactly the amount you send. The rate is checked again when you press Send; if it changed, you will see the new figures and confirm again."), color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
+    }
+}
+
 fun fmtRate(r: Double): String {
     val f = when { r >= 100 -> "%.2f"; r >= 1 -> "%.4f"; else -> "%.6f" }
     return String.format(Locale.US, f, r).trimEnd('0').trimEnd('.')
@@ -114,7 +140,7 @@ fun SendMoneyScreen(nav: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(Modifier.fillMaxWidth().heroCard().padding(20.dp)) {
             Text(softCase(L("AVAILABLE BALANCE")), color = Color.White.copy(alpha = .85f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
-            Text(money(symbol, Session.balance), color = Gold, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Text(money(symbol, Session.balance), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
             Text(L("Send money to any MudaPay member, in your country or abroad, using their phone number."), color = Color.White.copy(alpha = .9f), fontSize = 13.sp)
         }
         val sent = done
@@ -275,12 +301,7 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
             Text(L("Minimum: ${money(symbol, min.toDouble())} • You can still send ${money(symbol, remaining)} today"), color = Muted, fontSize = 12.sp)
             if (cross) {
                 if (q != null) {
-                    Column(Modifier.fillMaxWidth().background(GreenDark.copy(alpha = .08f), RoundedCornerShape(14.dp)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(L("They receive"), color = Muted, fontSize = 12.sp)
-                        Text(money(recvSymbol, q.dbl("receive_amount")), color = GreenDark, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                        Text("${L("Rate")}: 1 $symbol = ${fmtRate(q.dbl("rate"))} $recvSymbol", color = Muted, fontSize = 12.sp)
-                        Text("${L("Fee")}: ${money(symbol, q.dbl("fee"))} (${fmtRate(q.dbl("fee_pct"))}%)", color = Muted, fontSize = 12.sp)
-                    }
+                    QuoteBreakdown(q, symbol, recvSymbol)
                 } else if (quoting) {
                     Text(L("Calculating…"), color = Muted, fontSize = 12.sp)
                 } else {
@@ -343,8 +364,7 @@ private fun SendForm(rules: JSONObject, nav: (String) -> Unit, onSent: (JSONObje
                     if (cross) {
                         Text("${L("Country")}: ${f.str("country_name").ifEmpty { countryName(f.str("country")) }}", color = Ink, fontSize = 14.sp)
                         if (q != null) {
-                            Text("${L("They receive")}: ${money(recvSymbol, q.dbl("receive_amount"))}", color = GreenDark, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text("${L("Rate")}: 1 $symbol = ${fmtRate(q.dbl("rate"))} $recvSymbol • ${L("Fee")}: ${money(symbol, q.dbl("fee"))}", color = Muted, fontSize = 12.sp)
+                            QuoteBreakdown(q, symbol, recvSymbol, compact = true)
                         }
                     }
                     if (note.isNotBlank()) Text("${L("Note")}: ${note.trim()}", color = Ink, fontSize = 14.sp)

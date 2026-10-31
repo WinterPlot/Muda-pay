@@ -37,10 +37,10 @@ fun LowDataSettings() {
     val ctx = LocalContext.current
     var cleared by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().card().padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(L("Data saver"), color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Text(L("Useful on slow or expensive connections."), color = Muted, fontSize = 12.sp)
+        Text(L("Lite mode"), color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        Text(L("For slow or expensive connections and low-end phones. Failed requests are retried automatically and screens open from saved data."), color = Muted, fontSize = 12.sp)
         Spacer(Modifier.height(6.dp))
-        ToggleRow("Low-data mode", "Skips video thumbnails and loads other pictures only when you tap them", Offline.lowData) { Offline.updateLowData(it) }
+        ToggleRow("Lite mode (low data)", "Skips video thumbnails, loads other pictures only when you tap them, and uses smaller images", Offline.lowData) { Offline.updateLowData(it) }
         TextButton(onClick = { OfflineCache.clear(); cleared = true }) {
             Text(if (cleared) "Saved data cleared" else "Clear saved offline data", color = GreenDark, fontWeight = FontWeight.Bold)
         }

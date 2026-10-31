@@ -106,11 +106,11 @@ fun LeaderboardScreen() {
             val symbol = Session.user?.str("symbol") ?: ""
             Column(Modifier.fillMaxWidth().heroCard().padding(18.dp)) {
                 Text(softCase(L("MONTHLY PRIZE")), color = Color.White.copy(alpha = .85f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
-                Text(money(symbol, d.dbl("prize")), color = Gold, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                Text(money(symbol, d.dbl("prize")), color = Color.White, fontSize = 30.sp, fontWeight = FontWeight.Bold)
                 Text(L("Reach at least ${d.int("min_referrals_to_win")} referrals to qualify."), color = Color.White.copy(alpha = .9f), fontSize = 12.sp)
             }
             d.optJSONObject("last_winner")?.let { w ->
-                InfoBanner("Last winner: ${w.str("user_name")} (${countryName(w.str("country"))}) with ${w.int("referrals")} referrals won ${money(symbol, w.dbl("prize"))}.", Color(0xFFD97706), Icons.Default.EmojiEvents)
+                InfoBanner("Last winner: ${w.str("user_name")} (${countryName(w.str("country"))}) with ${w.int("referrals")} referrals won ${money(symbol, w.dbl("prize"))}.", Blue, Icons.Default.EmojiEvents)
             }
             val items = d.list("items")
             if (items.isEmpty()) EmptyState("No ranking yet", Icons.Default.Leaderboard, "Invite friends to appear here.")

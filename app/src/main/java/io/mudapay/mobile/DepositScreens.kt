@@ -47,14 +47,23 @@ fun DepositScreen(nav: (String) -> Unit) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(Modifier.fillMaxWidth().heroCard().padding(20.dp)) {
             Text(softCase(L("AVAILABLE BALANCE")), color = Color.White.copy(alpha = .85f), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
-            Text(money(symbol, Session.balance), color = Gold, fontSize = 32.sp, fontWeight = FontWeight.Bold)
-            Text(if (Session.user?.str("country")?.lowercase() == "cd") L("Add money with Airtel Money or crypto. You get it in your own currency.") else L("Add money with Lumicash or crypto. You get it in your own currency."), color = Color.White.copy(alpha = .9f), fontSize = 13.sp)
+            Text(money(symbol, Session.balance), color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+            Text(L("Add money with mobile money, card or crypto. You get it in your own currency."), color = Color.White.copy(alpha = .9f), fontSize = 13.sp)
         }
         if (Session.user?.str("country")?.lowercase() == "bi") {
             LumicashDepositSection { listKey++ }
         }
         if (Session.user?.str("country")?.lowercase() == "cd") {
             AirtelDepositSection { listKey++ }
+        }
+        HoneycoinDepositSection({ listKey++ }, "/honeycoin")   // each provider answers GET <base>/rules: disabled / unsupported country = nothing shown
+        HoneycoinDepositSection({ listKey++ }, "/payfonte")
+        Remote(refreshKey = listKey, call = { Api.call("GET", "/payfonte/card/rules") }) { rules, _ ->
+            // card deposits (Visa / Mastercard through Payfonte): nothing is shown when disabled or not available in the member's country
+            if (rules.bool("enabled") && !rules.bool("paused")) {
+                Text(L("Pay by card"), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 4.dp))
+                DepositForm(rules, { listKey++ }, card = true)
+            }
         }
         Remote(refreshKey = listKey, call = { Api.call("GET", "/deposits/rules") }) { rules, _ ->
             if (!rules.bool("enabled")) {
@@ -69,6 +78,9 @@ fun DepositScreen(nav: (String) -> Unit) {
         Text(L("Deposit history"), color = Ink, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.padding(top = 6.dp))
         if (Session.user?.str("country")?.lowercase() == "bi") LumicashHistory(listKey, symbol)
         if (Session.user?.str("country")?.lowercase() == "cd") AirtelHistory(listKey, symbol)
+        HoneycoinHistory(listKey, symbol, "/honeycoin")
+        HoneycoinHistory(listKey, symbol, "/payfonte")
+        DepositHistory(listKey, symbol, card = true)
         DepositHistory(listKey, symbol)
         Spacer(Modifier.height(8.dp))
     }
@@ -88,7 +100,10 @@ private fun OpenDeposits(open: List<JSONObject>, symbol: String) {
 }
 
 @Composable
-private fun DepositForm(rules: JSONObject, onChanged: () -> Unit) {
+private fun DepositForm(rules: JSONObject, onChanged: () -> Unit, card: Boolean = false) {
+    val quotePath = if (card) "/payfonte/card/quote" else "/deposits/quote"
+    val createPath = if (card) "/payfonte/card/deposit" else "/deposits"
+    val listPath = if (card) "/payfonte/card/deposits" else "/deposits"
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val symbol = rules.str("symbol")
@@ -111,7 +126,7 @@ private fun DepositForm(rules: JSONObject, onChanged: () -> Unit) {
         if (a <= 0) return@LaunchedEffect
         quoting = true
         delay(500)
-        val r = Api.call("POST", "/deposits/quote", JSONObject().put("amount", a))
+        val r = Api.call("POST", quotePath, JSONObject().put("amount", a))
         quoting = false
         if (r.ok) quote = r.data else quoteMsg = r.message
     }
@@ -123,7 +138,7 @@ private fun DepositForm(rules: JSONObject, onChanged: () -> Unit) {
             var n = 0
             while (n < 300) {
                 delay(6000); n++
-                val st = Api.call("GET", "/deposits/${w.int("id")}")
+                val st = Api.call("GET", "$listPath/${w.int("id")}")
                 if (!st.ok) continue
                 if (st.data.bool("credited")) {
                     Session.balance = st.data.dbl("balance")
@@ -160,13 +175,13 @@ private fun DepositForm(rules: JSONObject, onChanged: () -> Unit) {
         if (q != null) {
             Column(Modifier.fillMaxWidth().background(GreenDark.copy(alpha = .07f), RoundedCornerShape(14.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 QuoteLine(L("You receive"), money(symbol, q.dbl("amount")), strong = true)
-                QuoteLine(L("You pay in crypto"), "≈ ${usdText(q.dbl("usd"))}", strong = true)
+                QuoteLine(L(if (card) "You pay by card" else "You pay in crypto"), "≈ ${usdText(q.dbl("usd"))}", strong = true)
                 QuoteLine(L("Rate"), "1 USD = ${String.format(Locale.US, "%,.2f", q.dbl("rate"))} $currency")
                 if (q.dbl("fee_pct") > 0) QuoteLine(L("Service fee"), "${q.dbl("fee_pct")}%")
-                Text(L("Network fees are added on the payment page. The rate is locked for ${rules.int("quote_valid_minutes") / 60} hours after you start."), color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
+                Text(L(if (card) "Your bank may add its own fees. The rate is locked for ${rules.int("quote_valid_minutes") / 60} hours after you start." else "Network fees are added on the payment page. The rate is locked for ${rules.int("quote_valid_minutes") / 60} hours after you start."), color = Muted, fontSize = 11.sp, lineHeight = 15.sp)
             }
         }
-        PrimaryButton("CONTINUE", { confirm = true }, loading = busy, enabled = q != null && !quoting, color = Dark, icon = Icons.Default.CurrencyBitcoin)
+        PrimaryButton("CONTINUE", { confirm = true }, loading = busy, enabled = q != null && !quoting, color = Dark, icon = if (card) Icons.Default.CreditCard else Icons.Default.CurrencyBitcoin)
     }
 
     if (confirm && quote != null) {
@@ -177,15 +192,15 @@ private fun DepositForm(rules: JSONObject, onChanged: () -> Unit) {
             title = { Text(L("Add ${money(symbol, q.dbl("amount"))}?"), fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("${L("You will pay")}: ≈ ${usdText(q.dbl("usd"))} ${L("in crypto")}", color = Ink, fontSize = 14.sp)
-                    Text(L("You will open the secure payment page, choose your coin (USDT, BTC, ETH…) and send the exact amount shown. Your balance updates automatically after confirmation."), color = Muted, fontSize = 12.sp)
+                    Text("${L("You will pay")}: ≈ ${usdText(q.dbl("usd"))} ${L(if (card) "by card" else "in crypto")}", color = Ink, fontSize = 14.sp)
+                    Text(L(if (card) "You will open the secure payment page and pay with your Visa or Mastercard. Your card details are never shared with MudaPay. Your balance updates automatically after confirmation." else "You will open the secure payment page, choose your coin (USDT, BTC, ETH…) and send the exact amount shown. Your balance updates automatically after confirmation."), color = Muted, fontSize = 12.sp)
                 }
             },
             confirmButton = {
                 TextButton(onClick = {
                     confirm = false; busy = true
                     scope.launch {
-                        val r = Api.call("POST", "/deposits", JSONObject().put("amount", q.dbl("amount").toLong()), idem = idem)
+                        val r = Api.call("POST", createPath, JSONObject().put("amount", q.dbl("amount").toLong()), idem = idem)
                         busy = false
                         if (r.ok) {
                             idem = newIdemKey()
@@ -197,7 +212,7 @@ private fun DepositForm(rules: JSONObject, onChanged: () -> Unit) {
                             Ui.notify("Deposit", r.message)
                         }
                     }
-                }) { Text(L("Pay with crypto"), color = GreenDark, fontWeight = FontWeight.Bold) }
+                }) { Text(L(if (card) "Pay by card" else "Pay with crypto"), color = GreenDark, fontWeight = FontWeight.Bold) }
             },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text(L("Cancel"), color = Muted) } }
         )
@@ -215,10 +230,10 @@ private fun QuoteLine(label: String, value: String, strong: Boolean = false) {
 }
 
 @Composable
-private fun DepositHistory(refreshKey: Int, symbol: String) {
-    Remote(refreshKey = refreshKey, call = { Api.call("GET", "/deposits") }) { d, _ ->
+private fun DepositHistory(refreshKey: Int, symbol: String, card: Boolean = false) {
+    Remote(refreshKey = refreshKey, call = { Api.call("GET", if (card) "/payfonte/card/deposits" else "/deposits") }) { d, _ ->
         val items = d.list("items")
-        if (items.isEmpty()) EmptyState(L("No deposits yet"), Icons.Default.CurrencyBitcoin)
+        if (items.isEmpty() && !card) EmptyState(L("No deposits yet"), Icons.Default.CurrencyBitcoin)
         items.forEach { t ->
             val ok = t.bool("credited")
             val st = t.str("status")

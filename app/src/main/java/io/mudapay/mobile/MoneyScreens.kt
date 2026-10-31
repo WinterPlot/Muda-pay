@@ -287,20 +287,23 @@ private fun WithdrawForm(rules: JSONObject, reloadKey: Int, onOpen: (JSONObject)
 
 /* ------------------------------------------------------------------ transaction history */
 private class Kind(val label: String, val icon: ImageVector, val bg: Color, val fg: Color)
+private val IN_BG = Color(0xFFECFDF5)       // money in: soft green
+private val OUT_BG = Soft                   // money out: neutral grey, never alarming
+private val OUT_FG = Color(0xFF475569)
 private val KINDS = mapOf(
-    "survey" to Kind("Task reward", Icons.Default.TaskAlt, Color(0xFFF0FFFB), Green),
-    "referral" to Kind("Referral bonus", Icons.Default.Groups, Color(0xFFFFFBEB), Color(0xFFF59E0B)),
-    "admin_credit" to Kind("Credit", Icons.Default.AddCircle, Color(0xFFEFF6FF), Color(0xFF2563EB)),
-    "withdrawal" to Kind("Withdrawal", Icons.Default.SouthWest, Color(0xFFFEF2F2), Danger),
-    "transfer_out" to Kind("Money sent", Icons.Default.NorthEast, Color(0xFFFEF2F2), Danger),
-    "transfer_in" to Kind("Money received", Icons.Default.QrCode2, Color(0xFFF0FFFB), Green),
-    "deposit" to Kind("Crypto deposit", Icons.Default.CurrencyBitcoin, Color(0xFFEFF6FF), Color(0xFF2563EB)),
-    "agent_payout" to Kind("Agent cash-out refund", Icons.Default.Storefront, Color(0xFFF0FFFB), Green),
-    "agent_commission" to Kind("Agent commission", Icons.Default.Storefront, Color(0xFFFFFBEB), Color(0xFFF59E0B)),
-    "video" to Kind("Video reward", Icons.Default.PlayCircle, Color(0xFFF5F3FF), Color(0xFF7C3AED)),
-    "share_reward" to Kind("Share reward", Icons.Default.Share, Color(0xFFFDF2F8), Color(0xFFDB2777)),
-    "leaderboard_prize" to Kind("Leaderboard prize", Icons.Default.EmojiEvents, Color(0xFFFFFBEB), Color(0xFFD97706)),
-    "daily_bonus" to Kind("Login bonus", Icons.Default.LocalFireDepartment, Color(0xFFECFEFF), Color(0xFF0891B2))
+    "survey" to Kind("Task reward", Icons.Default.TaskAlt, IN_BG, GreenDark),
+    "referral" to Kind("Referral bonus", Icons.Default.Groups, IN_BG, GreenDark),
+    "admin_credit" to Kind("Credit", Icons.Default.AddCircle, IN_BG, GreenDark),
+    "withdrawal" to Kind("Withdrawal", Icons.Default.SouthWest, OUT_BG, OUT_FG),
+    "transfer_out" to Kind("Money sent", Icons.Default.NorthEast, OUT_BG, OUT_FG),
+    "transfer_in" to Kind("Money received", Icons.Default.SouthWest, IN_BG, GreenDark),
+    "deposit" to Kind("Crypto deposit", Icons.Default.CurrencyBitcoin, IN_BG, GreenDark),
+    "agent_payout" to Kind("Agent cash-out refund", Icons.Default.Storefront, IN_BG, GreenDark),
+    "agent_commission" to Kind("Agent commission", Icons.Default.Storefront, IN_BG, GreenDark),
+    "video" to Kind("Video reward", Icons.Default.PlayCircle, IN_BG, GreenDark),
+    "share_reward" to Kind("Share reward", Icons.Default.Share, IN_BG, GreenDark),
+    "leaderboard_prize" to Kind("Leaderboard prize", Icons.Default.EmojiEvents, IN_BG, GreenDark),
+    "daily_bonus" to Kind("Login bonus", Icons.Default.CalendarMonth, IN_BG, GreenDark)
 )
 
 @Composable
@@ -338,12 +341,12 @@ fun HistoryScreen() {
     val up = Offline.networkUp
     LaunchedEffect(up) { if (up && (cachedAt > 0L || errOffline)) { cursor = null; loadPage(true) } }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { PageIntro("Transaction history", "Your rewards, transfers and withdrawals.", Icons.AutoMirrored.Filled.ReceiptLong) }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 18.dp, end = 18.dp, bottom = 18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { TabHeader(L("Activity"), L("Your rewards, transfers and withdrawals.")) }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Column(Modifier.weight(1f).card().padding(14.dp)) { Text(softCase(L("TOTAL EARNED")), color = Slate, fontSize = 10.sp, fontWeight = FontWeight.Bold); Text(money(symbol, totals.dbl("earned")), color = GreenDark, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
-                Column(Modifier.weight(1f).card().padding(14.dp)) { Text(softCase(L("WITHDRAWN")), color = Slate, fontSize = 10.sp, fontWeight = FontWeight.Bold); Text(money(symbol, totals.dbl("withdrawn")), color = Danger, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
+                Column(Modifier.weight(1f).card().padding(14.dp)) { Text(softCase(L("WITHDRAWN")), color = Slate, fontSize = 10.sp, fontWeight = FontWeight.Bold); Text(money(symbol, totals.dbl("withdrawn")), color = Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp) }
             }
         }
         item {

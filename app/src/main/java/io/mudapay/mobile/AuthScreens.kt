@@ -100,22 +100,12 @@ import org.json.JSONObject
 /** Slow, living gradient behind every signed-out screen. Drawn once in AuthFlow so it never restarts between screens. */
 @Composable
 fun AuthBackdrop(content: @Composable BoxScope.() -> Unit) {
-    val t = rememberInfiniteTransition(label = "authBackdrop")
-    val a by t.animateFloat(0f, 1f, infiniteRepeatable(tween(15000, easing = LinearEasing), RepeatMode.Reverse), label = "orbA")
-    val b by t.animateFloat(0f, 1f, infiniteRepeatable(tween(21000, easing = LinearEasing), RepeatMode.Reverse), label = "orbB")
-    val s by t.animateFloat(0f, 1f, infiniteRepeatable(tween(9000, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "sweep")
+    // calm, static navy surface with two faint shapes: no moving blobs
     Box(
         Modifier.fillMaxSize().drawBehind {
-            drawRect(
-                Brush.linearGradient(
-                    listOf(GreenDark, Green, Blue),
-                    start = Offset(size.width * .25f * s, 0f),
-                    end = Offset(size.width * (1f - .25f * s), size.height)
-                )
-            )
-            drawCircle(Color.White.copy(alpha = .10f), radius = size.width * .55f, center = Offset(size.width * (.10f + .75f * a), size.height * (.10f + .10f * b)))
-            drawCircle(Color.White.copy(alpha = .07f), radius = size.width * .40f, center = Offset(size.width * (.95f - .65f * b), size.height * (.55f + .20f * a)))
-            drawCircle(Color.White.copy(alpha = .05f), radius = size.width * .26f, center = Offset(size.width * (.15f + .35f * a), size.height * (.92f - .10f * b)))
+            drawRect(Brush.verticalGradient(listOf(Navy, NavySoft)))
+            drawCircle(Color.White.copy(alpha = .04f), radius = size.width * .7f, center = Offset(size.width * 1.0f, size.height * .08f))
+            drawCircle(Green.copy(alpha = .14f), radius = size.width * .55f, center = Offset(size.width * .05f, size.height * 1.02f))
         },
         content = content
     )
@@ -146,15 +136,14 @@ fun LogoMark(markSize: Dp = 92.dp) {
             val base = markSize.toPx() / 2f
             val reach = this.size.minDimension / 2f
             val r = base + (reach - base) * pulse
-            drawCircle(Color.White.copy(alpha = .30f * (1f - pulse)), radius = r)
+            drawCircle(Color.White.copy(alpha = .10f * (1f - pulse)), radius = r)
             val p2 = (pulse + .5f) % 1f
-            drawCircle(Color.White.copy(alpha = .18f * (1f - p2)), radius = base + (reach - base) * p2)
+            drawCircle(Color.White.copy(alpha = .06f * (1f - p2)), radius = base + (reach - base) * p2)
         }
         Box(
             Modifier.size(markSize)
-                .graphicsLayer { scaleX = pop; scaleY = pop; translationY = bob.dp.toPx() }
-                .shadow(14.dp, tile, ambientColor = Color(0x33000000), spotColor = Color(0x55000000))
-                .clip(tile).background(Color.White.copy(alpha = .20f)).border(1.dp, Color.White.copy(alpha = .38f), tile),
+                .graphicsLayer { scaleX = pop; scaleY = pop; translationY = 0f }
+                .clip(tile).background(Green).border(1.dp, Color.White.copy(alpha = .25f), tile),
             contentAlignment = Alignment.Center
         ) { Icon(Icons.Default.AccountBalanceWallet, null, tint = Color.White, modifier = Modifier.size(markSize * .55f)) }
     }
@@ -174,12 +163,12 @@ fun AuthButton(
         if (pressed && enabled && !loading) .965f else 1f,
         spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium), label = "btnScale"
     )
-    val shape = RoundedCornerShape(18.dp)
-    val fg = if (kind == AuthBtn.White) GreenDark else Color.White
+    val shape = RoundedCornerShape(14.dp)
+    val fg = if (kind == AuthBtn.White) Navy else Color.White
     val base = modifier.fillMaxWidth().height(54.dp).graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (enabled) 1f else .5f }
     val styled = when (kind) {
-        AuthBtn.Brand -> base.shadow(9.dp, shape, ambientColor = Green.copy(alpha = .45f), spotColor = Blue.copy(alpha = .55f)).clip(shape).background(Gradient)
-        AuthBtn.White -> base.shadow(9.dp, shape, ambientColor = Color(0x33000000), spotColor = Color(0x44000000)).clip(shape).background(Color.White)
+        AuthBtn.Brand -> base.clip(shape).background(Green)
+        AuthBtn.White -> base.clip(shape).background(Color.White)
         AuthBtn.Ghost -> base.clip(shape).border(1.5.dp, Color.White.copy(alpha = .9f), shape)
     }
     Box(styled.clickable(interactionSource = src, indication = null, enabled = enabled && !loading, onClick = onClick), contentAlignment = Alignment.Center) {
@@ -288,14 +277,14 @@ fun AuthCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
 
 @Composable
 private fun FeatureChip(icon: ImageVector, label: String, modifier: Modifier = Modifier) {
-    val shape = RoundedCornerShape(18.dp)
+    val shape = RoundedCornerShape(16.dp)
     Column(
-        modifier.clip(shape).background(Color.White.copy(alpha = .14f)).border(1.dp, Color.White.copy(alpha = .24f), shape).padding(vertical = 14.dp),
+        modifier.clip(shape).background(Color.White.copy(alpha = .08f)).border(1.dp, Color.White.copy(alpha = .16f), shape).padding(vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(icon, null, tint = Color.White, modifier = Modifier.size(24.dp))
         Spacer(Modifier.height(6.dp))
-        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -309,19 +298,19 @@ fun WelcomeScreen(onLogin: () -> Unit, onRegister: () -> Unit) {
         LogoMark()
         Spacer(Modifier.height(4.dp))
         Reveal(250) { Text(L("MudaPay"), fontSize = 40.sp, fontWeight = FontWeight.Bold, color = Color.White, letterSpacing = (-1).sp) }
-        Reveal(350) { Text(L("Grow • Learn • Earn"), color = Color.White.copy(alpha = .92f), fontSize = 15.sp, letterSpacing = 0.sp) }
+        Reveal(350) { Text(L("Simple, secure payments"), color = Color.White.copy(alpha = .85f), fontSize = 15.sp, letterSpacing = 0.sp) }
         Spacer(Modifier.height(14.dp))
         Reveal(450) {
             Text(
-                L("Your everyday space for learning, sharing and earning rewards."), color = Color.White.copy(alpha = .95f),
+                L("Send, receive and manage your money in one trusted place."), color = Color.White.copy(alpha = .8f),
                 fontSize = 15.sp, lineHeight = 23.sp, textAlign = TextAlign.Center
             )
         }
         Spacer(Modifier.height(26.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Reveal(560, Modifier.weight(1f)) { FeatureChip(Icons.Default.School, L("Learn"), Modifier.fillMaxWidth()) }
-            Reveal(640, Modifier.weight(1f)) { FeatureChip(Icons.Default.Share, L("Share"), Modifier.fillMaxWidth()) }
-            Reveal(720, Modifier.weight(1f)) { FeatureChip(Icons.Default.Paid, L("Earn"), Modifier.fillMaxWidth()) }
+            Reveal(560, Modifier.weight(1f)) { FeatureChip(Icons.Default.NorthEast, L("Send"), Modifier.fillMaxWidth()) }
+            Reveal(640, Modifier.weight(1f)) { FeatureChip(Icons.Default.QrCode2, L("Receive"), Modifier.fillMaxWidth()) }
+            Reveal(720, Modifier.weight(1f)) { FeatureChip(Icons.Default.AddCard, L("Deposit"), Modifier.fillMaxWidth()) }
         }
         Spacer(Modifier.weight(1f))
         Reveal(820, Modifier.fillMaxWidth(), dy = 40.dp) {
@@ -405,7 +394,7 @@ private fun StepHeader(step: Int) {
         }
         Spacer(Modifier.height(8.dp))
         Box(Modifier.fillMaxWidth().height(5.dp).clip(CircleShape).background(Line)) {
-            Box(Modifier.fillMaxWidth(p).fillMaxHeight().clip(CircleShape).background(Gradient))
+            Box(Modifier.fillMaxWidth(p).fillMaxHeight().clip(CircleShape).background(Green))
         }
     }
 }

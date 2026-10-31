@@ -25,7 +25,16 @@ fun money(symbol: String, amount: Double): String {
 
 val COUNTRIES = listOf(
     "ke" to "Kenya", "tz" to "Tanzania", "ug" to "Uganda", "bi" to "Burundi", "rw" to "Rwanda",
-    "ng" to "Nigeria", "za" to "South Africa", "gh" to "Ghana", "cd" to "DR Congo", "zw" to "Zimbabwe"
+    "ng" to "Nigeria", "za" to "South Africa", "gh" to "Ghana", "cd" to "DR Congo", "zw" to "Zimbabwe",
+    // French-speaking West and Central Africa
+    "sn" to "Senegal", "ci" to "Ivory Coast", "cm" to "Cameroon", "ml" to "Mali",
+    "bf" to "Burkina Faso", "bj" to "Benin", "tg" to "Togo", "ne" to "Niger",
+    "gn" to "Guinea", "cg" to "Congo (Brazzaville)", "ga" to "Gabon", "td" to "Chad",
+    // Southern and East Africa
+    "zm" to "Zambia", "mz" to "Mozambique", "mg" to "Madagascar", "na" to "Namibia",
+    "ls" to "Lesotho", "sz" to "Eswatini", "sc" to "Seychelles", "ss" to "South Sudan",
+    // Other West Africa and Angola
+    "gm" to "Gambia", "sl" to "Sierra Leone", "lr" to "Liberia", "ao" to "Angola"
 )
 fun countryName(code: String): String = COUNTRIES.firstOrNull { it.first == code.lowercase() }?.second ?: code.uppercase()
 fun flagUrl(code: String): String = "${Config.SITE}/flags/${code.lowercase()}.png"

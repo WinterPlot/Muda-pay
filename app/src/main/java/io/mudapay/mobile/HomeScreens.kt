@@ -45,7 +45,7 @@ val MORE_ENTRIES = listOf(
     MoreEntry("Scan", "Scan to pay", "Scan a MudaPay QR code to pay", Icons.Default.QrCodeScanner),
     MoreEntry("Receive", "Receive money", "Your QR code and money received", Icons.Default.QrCode2),
     MoreEntry("Requests", "Payment requests", "Ask a member to pay you, or pay a request", Icons.Default.RequestQuote),
-    MoreEntry("Deposit", "Deposit", "Add money with Lumicash or crypto", Icons.Default.AddCard),
+    MoreEntry("Deposit", "Deposit", "Add money with mobile money or crypto", Icons.Default.AddCard),
     MoreEntry("Withdraw", "Withdraw", "Request a payout", Icons.Default.SouthWest),
     MoreEntry("AgentDesk", "Agent desk", "Pay cash-outs and earn commission", Icons.Default.Storefront),
     MoreEntry("Rewards", "Reward rates", "What each activity pays", Icons.Default.Percent),
@@ -135,31 +135,52 @@ private fun DashboardContent(d: JSONObject, claimMsg: String?, nav: (String) -> 
             Spacer(Modifier.width(8.dp))
             HeaderIcon(Icons.Default.Menu, "Menu", { nav("More") })
         }
-        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
             BalanceHero(
-                label = L("Total earnings") + " (" + user.str("country").uppercase() + ")",
+                label = L("Available balance") + " · " + user.str("country").uppercase(),
                 amount = money(symbol, Session.balance)
             )
+            if (claimMsg != null) InfoBanner(claimMsg, GreenDark, Icons.Default.CheckCircle)
             QuickActions(nav)
-            StreakCard(daily, symbol, claimMsg)
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                SectionHeader(L("Earn & explore"))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatBox("${tasks.int("done_today")}/${tasks.int("per_day")}", "Tasks today", Icons.Default.TaskAlt, Modifier.weight(1f)) { nav("Tasks") }
-                    StatBox("${user.int("referrals_active")}", "Active referrals", Icons.Default.Groups, Modifier.weight(1f)) { nav("Referrals") }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatBox("Videos", "Updates & tutorials", Icons.Default.PlayCircle, Modifier.weight(1f)) { nav("Videos") }
-                    StatBox("Share & Earn", "Post & get paid", Icons.Default.Share, Modifier.weight(1f)) { nav("Share") }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    StatBox("Leaderboard", "Top referrers", Icons.Default.EmojiEvents, Modifier.weight(1f)) { nav("Leaderboard") }
-                    StatBox("History", "Transactions", Icons.AutoMirrored.Filled.ReceiptLong, Modifier.weight(1f)) { nav("History") }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                SectionHeader(L("Shortcuts"))
+                MenuCard {
+                    MenuRow(L("Transaction history"), L("Rewards and withdrawals"), Icons.AutoMirrored.Filled.ReceiptLong, { nav("History") })
+                    MenuRow(L("Payment requests"), L("Ask a member to pay you, or pay a request"), Icons.Default.RequestQuote, { nav("Requests") })
+                    MenuRow(L("Rewards"), L("Daily tasks, referrals and bonuses"), Icons.Default.CardGiftcard, { nav("RewardsHub") }, trailing = "${tasks.int("done_today")}/${tasks.int("per_day")}", last = true)
                 }
             }
-            AiCard(nav)
-            ReferralCard(user, rewards.dbl("referral_percent"), nav)
             WalletIdRow(user.str("wallet_address"))
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ rewards hub (everything that is not a payment) */
+@Composable
+fun RewardsScreen(nav: (String) -> Unit) {
+    var claimMsg by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 28.dp)) {
+        TabHeader(L("Rewards"), L("Earn extra with tasks, friends and daily visits"))
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Remote(call = { Api.call("GET", "/dashboard") }) { d, _ ->
+                val user = d.optJSONObject("user") ?: JSONObject()
+                val rewards = d.optJSONObject("rewards") ?: JSONObject()
+                val daily = d.optJSONObject("daily_bonus") ?: JSONObject()
+                val tasks = d.optJSONObject("tasks") ?: JSONObject()
+                Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                    StreakCard(daily, user.str("symbol"), claimMsg)
+                    MenuCard {
+                        MenuRow(L("Daily tasks"), L("Learn and complete activities"), Icons.Default.TaskAlt, { nav("Tasks") }, trailing = "${tasks.int("done_today")}/${tasks.int("per_day")}")
+                        MenuRow(L("Videos"), L("Updates and tutorials"), Icons.Default.PlayCircle, { nav("Videos") })
+                        MenuRow(L("Share & Earn"), L("Post a campaign and get paid"), Icons.Default.Share, { nav("Share") })
+                        MenuRow(L("My referrals"), L("Who joined, QR code and earnings"), Icons.Default.Groups, { nav("Referrals") }, trailing = "${user.int("referrals_active")}")
+                        MenuRow(L("Leaderboard"), L("Top referrers"), Icons.Default.EmojiEvents, { nav("Leaderboard") })
+                        MenuRow(L("Reward rates"), L("What each activity pays"), Icons.Default.Percent, { nav("Rewards") }, last = true)
+                    }
+                    ReferralCard(user, rewards.dbl("referral_percent"), nav)
+                    AiCard(nav)
+                }
+            }
         }
     }
 }
@@ -169,7 +190,7 @@ private fun WalletIdRow(wallet: String) {
     val ctx = LocalContext.current
     Row(Modifier.fillMaxWidth().card().padding(start = 16.dp, top = 6.dp, bottom = 6.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(softCase(L("MUDAPAY DIGITAL WALLET ID")), color = Muted, fontSize = 12.sp)
+            Text(L("Wallet ID"), color = Muted, fontSize = 12.sp)
             Text(wallet.ifEmpty { "—" }, color = GreenDark, fontWeight = FontWeight.SemiBold, fontFamily = FontFamily.Monospace, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         IconButton(onClick = { copyToClipboard(ctx, "Wallet ID", wallet); Ui.notify("Copied", "Wallet ID copied.") }, enabled = wallet.isNotEmpty()) {
@@ -180,22 +201,22 @@ private fun WalletIdRow(wallet: String) {
 
 @Composable
 private fun QuickActions(nav: (String) -> Unit) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        QuickAction("Send", Icons.Default.NorthEast, GreenDark, Modifier.weight(1f)) { nav("Send") }
-        QuickAction("Receive", Icons.Default.QrCode2, Blue, Modifier.weight(1f)) { nav("Receive") }
-        QuickAction("Scan", Icons.Default.QrCodeScanner, Color(0xFF0891B2), Modifier.weight(1f)) { nav("Scan") }
-        QuickAction("Deposit", Icons.Default.AddCard, Color(0xFF7C3AED), Modifier.weight(1f)) { nav("Deposit") }
-        QuickAction("Invite", Icons.Default.Groups, Color(0xFFD97706), Modifier.weight(1f)) { nav("Referrals") }
+    Row(Modifier.fillMaxWidth().card().padding(horizontal = 6.dp, vertical = 14.dp)) {
+        QuickAction("Send", Icons.Default.NorthEast, Modifier.weight(1f)) { nav("Send") }
+        QuickAction("Receive", Icons.Default.SouthWest, Modifier.weight(1f)) { nav("Receive") }
+        QuickAction("Scan", Icons.Default.QrCodeScanner, Modifier.weight(1f)) { nav("Scan") }
+        QuickAction("Deposit", Icons.Default.AddCard, Modifier.weight(1f)) { nav("Deposit") }
+        QuickAction("Withdraw", Icons.Default.AccountBalanceWallet, Modifier.weight(1f)) { nav("Withdraw") }
     }
 }
 
 @Composable
-private fun QuickAction(label: String, icon: ImageVector, tint: Color, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Column(modifier.clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick).padding(vertical = 4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(56.dp).card(RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
-            Icon(icon, null, tint = tint, modifier = Modifier.size(25.dp))
+private fun QuickAction(label: String, icon: ImageVector, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick).padding(vertical = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(48.dp).background(Green.copy(alpha = .10f), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(icon, null, tint = GreenDark, modifier = Modifier.size(22.dp))
         }
-        Spacer(Modifier.height(7.dp))
+        Spacer(Modifier.height(8.dp))
         Text(L(label), color = Ink, fontSize = 12.sp, fontWeight = FontWeight.Medium, maxLines = 1)
     }
 }
@@ -214,7 +235,7 @@ private fun StreakCard(daily: JSONObject, symbol: String, claimMsg: String?) {
     val dayNames = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
     Column(Modifier.fillMaxWidth().card().padding(16.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            IconChip(Icons.Default.LocalFireDepartment, Color(0xFFD97706), 42.dp)
+            IconChip(Icons.Default.CalendarMonth, GreenDark, 42.dp)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(L("Weekly login bonus"), color = Dark, fontWeight = FontWeight.Bold, fontSize = 15.sp)
@@ -243,7 +264,7 @@ private fun StreakCard(daily: JSONObject, symbol: String, claimMsg: String?) {
                 Column(
                     Modifier.weight(1f)
                         .background(if (done) Green.copy(alpha = .12f) else if (missed) Color(0xFFFEE2E2) else Soft, RoundedCornerShape(12.dp))
-                        .border(1.5.dp, if (isToday) Gold else Color.Transparent, RoundedCornerShape(12.dp)).padding(vertical = 8.dp),
+                        .border(1.5.dp, if (isToday) Green else Color.Transparent, RoundedCornerShape(12.dp)).padding(vertical = 8.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(L(dayNames[i]), color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Medium)
@@ -279,25 +300,19 @@ private fun AiCard(nav: (String) -> Unit) {
         value = if (r.ok) r.data.str("tip_of_day") else null
     }
     val t = tip ?: return
-    val shape = RoundedCornerShape(24.dp)
-    Column(Modifier.fillMaxWidth().background(Dark, shape).padding(18.dp)) {
+    Column(Modifier.fillMaxWidth().card().padding(16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             AiOrb(size = 36.dp)
-            Spacer(Modifier.width(6.dp))
-            Column {
-                Text(L("Muda AI"), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                Text(L("Your MudaPay assistant + free lessons"), color = Color(0xFFCBD5E1), fontSize = 12.sp)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(L("Muda AI"), color = Dark, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(L("Tip of the day"), color = Muted, fontSize = 12.sp)
             }
         }
-        Spacer(Modifier.height(14.dp))
-        Column(Modifier.fillMaxWidth().background(Color.White.copy(alpha = .07f), RoundedCornerShape(16.dp)).padding(14.dp)) {
-            Text(L("Tip of the day"), color = Gold, fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
-            Text(t, color = Color(0xFFE2E8F0), fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 4.dp))
-        }
-        Spacer(Modifier.height(14.dp))
-        PrimaryButton("ASK MUDA AI", { nav("Coach") }, icon = Icons.Default.Chat)
+        Text(t, color = Ink, fontSize = 13.sp, lineHeight = 19.sp, modifier = Modifier.padding(top = 10.dp, bottom = 14.dp))
+        PrimaryButton(L("Ask Muda AI"), { nav("Coach") }, icon = Icons.Default.Chat)
         Spacer(Modifier.height(8.dp))
-        GhostButton(softCase(L("WRITE MY SHARE CAPTION")), { nav("ShareApp") }, Modifier.fillMaxWidth(), icon = Icons.Default.Edit, onDark = true)
+        GhostButton(softCase(L("WRITE MY SHARE CAPTION")), { nav("ShareApp") }, Modifier.fillMaxWidth(), icon = Icons.Default.Edit)
     }
 }
 
@@ -305,35 +320,29 @@ private fun AiCard(nav: (String) -> Unit) {
 private fun ReferralCard(user: JSONObject, percent: Double, nav: (String) -> Unit) {
     val ctx = LocalContext.current
     val link = user.str("referral_link")
-    Column(Modifier.fillMaxWidth().background(Dark, RoundedCornerShape(24.dp)).padding(18.dp)) {
-        Text(L("Referral Commission"), color = Color.White.copy(alpha = .75f), fontWeight = FontWeight.Medium, fontSize = 13.sp)
-        Text(percentText(percent), color = Gold, fontWeight = FontWeight.Bold, fontSize = 30.sp, modifier = Modifier.padding(top = 2.dp))
-        Text(L("Of each friend's first deposit"), color = Color.White.copy(alpha = .65f), fontSize = 12.sp)
+    Column(Modifier.fillMaxWidth().card().padding(16.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconChip(Icons.Default.Groups, GreenDark, 42.dp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(L("Invite & earn"), color = Dark, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text(L("Of each friend's first deposit"), color = Muted, fontSize = 12.sp)
+            }
+            Text(percentText(percent), color = GreenDark, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+        }
         Row(
-            Modifier.padding(top = 16.dp).fillMaxWidth().background(Color.White.copy(alpha = .08f), RoundedCornerShape(14.dp)).padding(start = 14.dp),
+            Modifier.padding(top = 14.dp).fillMaxWidth().background(Soft, RoundedCornerShape(14.dp)).padding(start = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(link, color = Color(0xFFCBD5E1), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Text(link, color = Ink, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             IconButton(onClick = { copyToClipboard(ctx, "Invite link", link); Ui.notify("Copied", "Your invite link was copied.") }) {
-                Icon(Icons.Default.ContentCopy, L("Copy"), tint = Color.White)
+                Icon(Icons.Default.ContentCopy, L("Copy"), tint = GreenDark)
             }
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            GhostButton("SHARE LINK", { shareText(ctx, "Join me on MudaPay and start earning: $link") }, Modifier.weight(1f), icon = Icons.Default.Share, onDark = true)
-            GhostButton(L("Share the app"), { nav("ShareApp") }, Modifier.weight(1f), icon = Icons.Default.Android, onDark = true)
-        }
-        Spacer(Modifier.height(10.dp))
-        GhostButton("MY REFERRALS & QR CODE", { nav("Referrals") }, Modifier.fillMaxWidth(), icon = Icons.Default.QrCode2, onDark = true)
-        Spacer(Modifier.height(10.dp))
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Gold.copy(alpha = .16f)).clickable { nav("Leaderboard") }.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Default.EmojiEvents, null, tint = Gold, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
-            Text(L("Leaderboard · top 1 wins big"), color = Gold, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, modifier = Modifier.weight(1f))
-            Icon(Icons.Default.ChevronRight, null, tint = Gold, modifier = Modifier.size(20.dp))
+            GhostButton(L("Share link"), { shareText(ctx, "Join me on MudaPay and start earning: $link") }, Modifier.weight(1f), icon = Icons.Default.Share)
+            GhostButton(L("QR code"), { nav("Referrals") }, Modifier.weight(1f), icon = Icons.Default.QrCode2)
         }
     }
 }
@@ -399,7 +408,7 @@ fun RewardRatesScreen() {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 ContentRow("Daily task", "Per completed task, up to ${(d.optJSONObject("tasks") ?: JSONObject()).int("per_day")} a day", Icons.Default.TaskAlt, {}, trailing = money(symbol, rw.dbl("survey")))
                 ContentRow("Share campaign", "After review and approval", Icons.Default.Share, {}, GreenDark, money(symbol, rw.dbl("share")))
-                ContentRow("Referral commission", "Of each friend's first deposit", Icons.Default.Groups, {}, Color(0xFFD97706), percentText(rw.dbl("referral_percent")))
+                ContentRow("Referral commission", "Of each friend's first deposit", Icons.Default.Groups, {}, GreenDark, percentText(rw.dbl("referral_percent")))
                 Column(Modifier.fillMaxWidth().card(RoundedCornerShape(18.dp)).padding(14.dp)) {
                     Text(L("Daily login bonus"), color = Ink, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                     sched.forEachIndexed { i, a -> Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) {

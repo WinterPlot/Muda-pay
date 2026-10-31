@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableDoubleStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -178,6 +179,7 @@ object Http {
 /* ---------------------------------------------------------------- HTTP client */
 object Api {
     private val refreshLock = Mutex()
+    @Volatile private var neverSent = false   // last failure was "could not connect": the request did not reach the server
 
     suspend fun call(
         method: String,
@@ -192,6 +194,22 @@ object Api {
         if (!path.startsWith("/client/errors")) ErrorReporter.lastCall = "$method $path"   // context for a crash report (path only, never the body or the query)
         val used = Session.accessToken
         var r = request(method, path, body, query, auth, idem, timeoutMs, null)
+        // Weak network (the phone thinks it is online but the call failed): retry automatically.
+        //  - reads (GET): once, after 1.5 s
+        //  - money calls carrying an Idempotency-Key: up to 3 times, ONLY when the request never reached the server (no route / no connection).
+        //    The same key is reused, so even a request that did get through is answered from the server's saved result, never executed twice.
+        if (r.code == "network" && Offline.networkUp) {
+            val gaps = when {
+                idem != null -> if (neverSent) listOf(1500L, 3000L, 6000L) else emptyList()
+                method == "GET" -> listOf(1500L)
+                else -> emptyList()
+            }
+            for (g in gaps) {
+                delay(g)
+                r = request(method, path, body, query, auth, idem, timeoutMs, null)
+                if (r.code != "network" || (idem != null && !neverSent)) break
+            }
+        }
         if (auth && r.http == 401 && Session.refreshToken != null) {
             if (refresh(used)) r = request(method, path, body, query, auth, idem, timeoutMs, null)
         }
@@ -284,6 +302,7 @@ object Api {
         } catch (e: SSLPeerUnverifiedException) {
             ApiResult(0, false, JSONObject(), "tls", "A secure connection to MudaPay could not be verified. Update the app or try another network.")
         } catch (e: Exception) {
+            neverSent = e is java.net.ConnectException || e is java.net.UnknownHostException || e is java.net.NoRouteToHostException
             if (e !is java.io.IOException && e !is kotlinx.coroutines.CancellationException) ErrorReporter.nonFatal(e, "Api.request $method $path")   // an IO problem is just the network; anything else is a bug
             Offline.reportReachable(false)
             ApiResult(0, false, JSONObject(), "network", "Can't reach MudaPay. Check your connection and try again.")

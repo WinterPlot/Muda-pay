@@ -22,8 +22,8 @@ android {
         applicationId = "io.mudapay.mobile"
         minSdk = 23
         targetSdk = 35
-        versionCode = 22
-        versionName = "3.6.3"
+        versionCode = 23
+        versionName = "3.7.0"
     }
     if (mudaKeystore.exists()) {
         signingConfigs {
