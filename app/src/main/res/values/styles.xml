@@ -1,0 +1,19 @@
+<resources>
+    <style name="Theme.MudaPay" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:colorAccent">#0B8F6A</item>
+        <item name="android:windowBackground">#0A0E1A</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+    <!-- Muda AI assistant panel: transparent window that floats over whatever app is open. -->
+    <style name="Theme.MudaPay.Assistant" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
+</resources>
