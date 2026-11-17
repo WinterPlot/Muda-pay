@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Declares MudaPay as a "Digital assistant app" (Settings > Apps > Default apps). -->
+<voice-interaction-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:sessionService="io.mudapay.mobile.MudaAssistSessionService"
+    android:recognitionService="io.mudapay.mobile.MudaAssistRecognitionService"
+    android:supportsAssist="true" />

@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- "direct" build only (website download / sideload): lets MudaPay open Android's installer for the update file it downloaded
+         from its own server. The Google Play build does NOT have this permission (Play policy: apps update only through Google Play). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+</manifest>

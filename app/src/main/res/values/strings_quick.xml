@@ -1,0 +1,15 @@
+<resources>
+    <string name="tile_send">Send money</string>
+    <string name="tile_scan">Scan to pay</string>
+    <string name="tile_receive">Receive money</string>
+    <string name="tile_hide">Hide balance</string>
+    <string name="tile_on">On</string>
+    <string name="tile_off">Off</string>
+    <string name="widget_desc">Your balance with Send, Scan and Receive shortcuts</string>
+    <string name="shortcut_send">Send</string>
+    <string name="shortcut_send_long">Send money</string>
+    <string name="shortcut_scan">Scan</string>
+    <string name="shortcut_scan_long">Scan to pay</string>
+    <string name="shortcut_receive">Receive</string>
+    <string name="shortcut_receive_long">Receive money</string>
+</resources>

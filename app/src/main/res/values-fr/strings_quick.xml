@@ -1,0 +1,15 @@
+<resources>
+    <string name="tile_send">Envoyer de l\'argent</string>
+    <string name="tile_scan">Scanner pour payer</string>
+    <string name="tile_receive">Recevoir de l\'argent</string>
+    <string name="tile_hide">Masquer le solde</string>
+    <string name="tile_on">Activé</string>
+    <string name="tile_off">Désactivé</string>
+    <string name="widget_desc">Votre solde avec les raccourcis Envoyer, Scanner et Recevoir</string>
+    <string name="shortcut_send">Envoyer</string>
+    <string name="shortcut_send_long">Envoyer de l\'argent</string>
+    <string name="shortcut_scan">Scanner</string>
+    <string name="shortcut_scan_long">Scanner pour payer</string>
+    <string name="shortcut_receive">Recevoir</string>
+    <string name="shortcut_receive_long">Recevoir de l\'argent</string>
+</resources>
